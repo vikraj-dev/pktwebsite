@@ -72,25 +72,21 @@ class Header extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            height: 45,
-            width: 45,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF064E3B), Color(0xFF134E4A)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF134E4A).withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ],
-            ),
-            child: const Icon(Icons.local_taxi_rounded, color: Colors.white, size: 26),
-          ),
+  height: 65,
+  width: 65,
+  padding: const EdgeInsets.all(8), // Logo inner space-ku padding
+  decoration: BoxDecoration(
+
+    borderRadius: BorderRadius.circular(12),
+    
+  ),
+  child: // Ithai try pannu
+Image.asset(
+  'assets/pktlogo.png', // Build-ku ithu thaan correct configuration
+  fit: BoxFit.contain,
+  errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_taxi, color: Colors.white),
+),
+),
           const SizedBox(width: 15),
           const Column(
             mainAxisAlignment: MainAxisAlignment.center,
