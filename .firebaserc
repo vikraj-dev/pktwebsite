@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "pktcalltaxiapp"
+  },
+  "targets": {
+    "pktcalltaxiapp": {
+      "hosting": {
+        "user-site": [
+          "pkt-customer-booking"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
