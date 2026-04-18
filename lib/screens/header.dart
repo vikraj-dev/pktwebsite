@@ -2,12 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'dart:ui';
 
+// ══════════════════════════════════════════════════════════════
+//  LUXURY BLACK & GOLD HEADER — PKT CALL TAXI
+//  Logic & Callbacks: 100% untouched
+//  UI: Full Black & Gold luxury redesign
+// ══════════════════════════════════════════════════════════════
+
 class Header extends StatelessWidget {
   final VoidCallback onAboutTap;
   final VoidCallback onHomeTap;
   final VoidCallback onTarifTap;
   final VoidCallback onContectTap;
   final String activePage;
+
+  // ── Luxury Color Palette (matches Homepage) ───────────────────
+  static const Color kBg          = Color(0xFF0A0A0A);
+  static const Color kGold        = Color(0xFFC9A84C);
+  static const Color kGoldDim     = Color(0xFF7A6030);
+  static const Color kTextPrimary = Color(0xFFF0E6C8);
+  static const Color kTextMuted   = Color(0xFF6A5C40);
+  static const Color kBorder      = Color(0x22C9A84C);
+  static const Color kBorderHov   = Color(0x55C9A84C);
 
   const Header({
     super.key,
@@ -22,40 +37,27 @@ class Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return ClipRRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15), // Enhanced blur for premium feel
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
-          height: 90, // Slightly increased height for breathing room
+          height: 72,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.7), 
-            border: Border(
-              bottom: BorderSide(color: Colors.white.withOpacity(0.3), width: 1.5),
+            // Deep black with very subtle gold tint
+            color: const Color(0xF0090909),
+            border: const Border(
+              bottom: BorderSide(color: kBorder, width: 1),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
-              )
-            ],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 60),
+          padding: const EdgeInsets.symmetric(horizontal: 48),
           child: Row(
             children: [
-              // --- LUXURY LOGO SECTION ---
               _buildLogo(),
-              
               const Spacer(),
-
-              // --- NAVIGATION MENU ---
-              _buildNavButton('HOME', onHomeTap),
-              _buildNavButton('ABOUT', onAboutTap),
-              _buildNavButton('TARIFF', onTarifTap),
+              _buildNavButton('HOME',    onHomeTap),
+              _buildNavButton('ABOUT',   onAboutTap),
+              _buildNavButton('TARIFF',  onTarifTap),
               _buildNavButton('CONTACT', onContectTap),
-
-              const SizedBox(width: 40),
-
-              // --- PREMIUM CALL TO ACTION ---
+              const SizedBox(width: 36),
               _buildBookingButton(),
             ],
           ),
@@ -64,90 +66,120 @@ class Header extends StatelessWidget {
     );
   }
 
+  // ── Logo ──────────────────────────────────────────────────────
   Widget _buildLogo() {
     return InkWell(
       onTap: () => Get.toNamed('/dashboard'),
-      borderRadius: BorderRadius.circular(15),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-  height: 65,
-  width: 65,
-  padding: const EdgeInsets.all(8), // Logo inner space-ku padding
-  decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(10),
+      hoverColor: kGold.withOpacity(0.05),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Logo image container with gold border
+            Container(
+              height: 44,
+              width: 44,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: kBorder, width: 1),
+                color: const Color(0xFF161616),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(9),
+                child: Image.asset(
+                  'assets/pktlogo.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.local_taxi,
+                    color: kGold,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
 
-    borderRadius: BorderRadius.circular(12),
-    
-  ),
-  child: // Ithai try pannu
-Image.asset(
-  'assets/pktlogo.png', // Build-ku ithu thaan correct configuration
-  fit: BoxFit.contain,
-  errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_taxi, color: Colors.white),
-),
-),
-          const SizedBox(width: 15),
-          const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'PKT',
-                style: TextStyle(
-                  color: Color(0xFF0F172A),
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  height: 1,
+            const SizedBox(width: 12),
+
+            // Brand name
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // PKT with gold accent dot
+                Row(
+                  children: [
+                    const Text(
+                      'PKT',
+                      style: TextStyle(
+                        color: kTextPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 3,
+                        height: 1,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    // Tiny gold dot accent
+                    Container(
+                      width: 5, height: 5,
+                      decoration: const BoxDecoration(
+                        color: kGold, shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              Text(
-                'CALL TAXI',
-                style: TextStyle(
-                  color: Color(0xFF64748B),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4,
+                const SizedBox(height: 3),
+                const Text(
+                  'CALL TAXI',
+                  style: TextStyle(
+                    color: kGoldDim,
+                    fontSize: 7,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 4,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
+  // ── Nav Button ────────────────────────────────────────────────
   Widget _buildNavButton(String title, VoidCallback onTap) {
-    bool isActive = activePage == title;
+    final bool isActive = activePage == title;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
       child: InkWell(
         onTap: onTap,
         mouseCursor: SystemMouseCursors.click,
         hoverColor: Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               title,
               style: TextStyle(
-                color: isActive ? const Color(0xFF134E4A) : const Color(0xFF475569),
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
-                letterSpacing: 1.2,
+                color: isActive ? kGold : kTextMuted,
+                fontSize: 11,
+                fontWeight: isActive ? FontWeight.w800 : FontWeight.w500,
+                letterSpacing: 2,
               ),
             ),
-            const SizedBox(height: 6),
-            // Active Indicator with Animation
+            const SizedBox(height: 5),
+            // Gold active underline indicator
             AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
+              duration: const Duration(milliseconds: 350),
               curve: Curves.easeOutCubic,
-              height: 3,
-              width: isActive ? 24 : 0,
+              height: 1.5,
+              width: isActive ? 20.0 : 0.0,
               decoration: BoxDecoration(
-                color: const Color(0xFF134E4A),
+                color: kGold,
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -157,37 +189,32 @@ Image.asset(
     );
   }
 
+  // ── Book Now Button ───────────────────────────────────────────
   Widget _buildBookingButton() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF134E4A).withOpacity(0.2),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          )
-        ],
+    return ElevatedButton(
+      onPressed: onHomeTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: kGold,
+        foregroundColor: kBg,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
-      child: ElevatedButton(
-        onPressed: onHomeTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF0F172A), // Dark Midnight for contrast
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 0,
-        ),
-        child: const Row(
-          children: [
-            Text(
-              'BOOK NOW',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Text(
+            'BOOK NOW',
+            style: TextStyle(
+              color: Color(0xFF0A0A0A),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
             ),
-            SizedBox(width: 10),
-            Icon(Icons.arrow_forward_ios, size: 14),
-          ],
-        ),
+          ),
+          SizedBox(width: 10),
+          Icon(Icons.arrow_forward_ios, size: 11, color: Color(0xFF0A0A0A)),
+        ],
       ),
     );
   }

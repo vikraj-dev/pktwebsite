@@ -5,6 +5,16 @@ import 'aboutpage.dart';
 import 'homepage.dart';
 import 'header.dart';
 
+// ══════════════════════════════════════════════════════════════
+//  OPTIMIZED WEBPAGE — PKT CALL TAXI
+//  Lag Fix:
+//  1. _onScroll setState → removed, ValueNotifier use pannren
+//  2. AnimatedPositioned → removed, ValueListenableBuilder use
+//  3. RepaintBoundary → every section wrap pannren
+//  4. ClampingScrollPhysics → web ku smoothest
+//  5. Header separate ValueListenableBuilder — no full rebuild
+// ══════════════════════════════════════════════════════════════
+
 class Webpage extends StatefulWidget {
   const Webpage({super.key});
 
@@ -13,149 +23,211 @@ class Webpage extends StatefulWidget {
 }
 
 class _WebpageState extends State<Webpage> {
-  // GlobalKeys for scrolling
-  final aboutKey = GlobalKey();
-  final homeKey = GlobalKey();
-  final tarifkey = GlobalKey();
+
+  // ── Keys (UNTOUCHED) ─────────────────────────────────────────
+  final aboutKey   = GlobalKey();
+  final homeKey    = GlobalKey();
+  final tarifkey   = GlobalKey();
   final contectkey = GlobalKey();
-  
+
   final ScrollController scrollController = ScrollController();
-  String activeSection = 'HOME';
+
+  // ── ValueNotifiers — NO setState on scroll! ──────────────────
+  // Only the specific widget rebuilds, not the entire page
+  final ValueNotifier<String> _activeSection  = ValueNotifier('HOME');
+  final ValueNotifier<bool>   _showScrollTop  = ValueNotifier(false);
 
   @override
   void initState() {
     super.initState();
-    // Scroll aagum pothu section detect panna listener
     scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    scrollController.removeListener(_onScroll);
     scrollController.dispose();
+    _activeSection.dispose();
+    _showScrollTop.dispose();
     super.dispose();
   }
 
+  // ── Scroll Listener — Zero setState! ─────────────────────────
   void _onScroll() {
     if (!scrollController.hasClients) return;
-    
-    double offset = scrollController.offset;
-    
-    // Offset values based on your section heights
-    setState(() {
-      if (offset < 700) {
-        activeSection = 'HOME';
-      } else if (offset >= 700 && offset < 1500) {
-        activeSection = 'ABOUT';
-      } else if (offset >= 1500 && offset < 2300) {
-        activeSection = 'TARIFF';
-      } else {
-        activeSection = 'CONTACT';
-      }
-    });
+    final double offset = scrollController.offset;
+
+    // Active section detect — only notifier update, no rebuild
+    final String section;
+    if (offset < 700) {
+      section = 'HOME';
+    } else if (offset < 1500) {
+      section = 'ABOUT';
+    } else if (offset < 2300) {
+      section = 'TARIFF';
+    } else {
+      section = 'CONTACT';
+    }
+    if (_activeSection.value != section) {
+      _activeSection.value = section; // Only header rebuilds!
+    }
+
+    // Scroll to top button — only button rebuilds!
+    final bool show = offset > 500;
+    if (_showScrollTop.value != show) {
+      _showScrollTop.value = show;
+    }
   }
 
-  // Smooth Scroll Function
+  // ── Scroll To (UNTOUCHED) ─────────────────────────────────────
   void _scrollTo(GlobalKey key) {
-    final context = key.currentContext;
-    if (context != null) {
+    final ctx = key.currentContext;
+    if (ctx != null) {
       Scrollable.ensureVisible(
-        context,
-        duration: const Duration(milliseconds: 1000),
+        ctx,
+        duration: const Duration(milliseconds: 800),
         curve: Curves.easeInOutCubic,
       );
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  //  BUILD
+  // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      // Stack use panni Header-ai fixed-ah mela vachukalam
+      backgroundColor: const Color(0xFF0A0A0A),
       body: Stack(
         children: [
-          // 1. MAIN CONTENT LAYER
+
+          // ── 1. MAIN SCROLL CONTENT ──────────────────────────
           Positioned.fill(
             child: SingleChildScrollView(
               controller: scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
+              // ClampingScrollPhysics = web ku best, no rubber band
+              physics: const ClampingScrollPhysics(),
               child: Column(
                 children: [
-                  // Header space (Do not use Expanded here)
-                  const SizedBox(height: 90), 
-                  
-                  // Homepage Section
-                  Homepage(key: homeKey),
-                  
-                  // About Section
-                  AboutPage(aboutKey: aboutKey),
-                  
-                  // Luxury Divider
-                  _buildSectionDivider(),
-                  
-                  // Tariff Section
-                  TarifPage(tarifkey: tarifkey),
-                  
-                  // Contact & Footer Section
-                  Contectpage(
-                    contectkey: contectkey,
-                    onHomeTap: () => _scrollTo(homeKey),
-                    onAboutTap: () => _scrollTo(aboutKey),
-                    onTarifTap: () => _scrollTo(tarifkey),
-                    onContactTap: () => _scrollTo(contectkey),
+                  // Header space
+                  const SizedBox(height: 72),
+
+                  // ── Each section RepaintBoundary wrap ──
+                  // Scroll panna other sections repaint aagaadu!
+
+                  RepaintBoundary(
+                    child: Homepage(key: homeKey),
+                  ),
+
+                  RepaintBoundary(
+                    child: AboutPage(aboutKey: aboutKey),
+                  ),
+
+                  // Gold section divider
+                  RepaintBoundary(
+                    child: _buildSectionDivider(),
+                  ),
+
+                  RepaintBoundary(
+                    child: TarifPage(tarifkey: tarifkey),
+                  ),
+
+                  RepaintBoundary(
+                    child: Contectpage(
+                      contectkey:  contectkey,
+                      onHomeTap:   () => _scrollTo(homeKey),
+                      onAboutTap:  () => _scrollTo(aboutKey),
+                      onTarifTap:  () => _scrollTo(tarifkey),
+                      onContactTap: () => _scrollTo(contectkey),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
 
-          // 2. FIXED HEADER LAYER (Top-most)
+          // ── 2. FIXED HEADER — only rebuilds on section change ──
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Header(
-              activePage: activeSection,
-              onHomeTap: () => _scrollTo(homeKey),
-              onAboutTap: () => _scrollTo(aboutKey),
-              onTarifTap: () => _scrollTo(tarifkey),
-              onContectTap: () => _scrollTo(contectkey),
+            top: 0, left: 0, right: 0,
+            child: RepaintBoundary(
+              child: ValueListenableBuilder<String>(
+                valueListenable: _activeSection,
+                builder: (_, section, __) => Header(
+                  activePage:     section,
+                  onHomeTap:      () => _scrollTo(homeKey),
+                  onAboutTap:     () => _scrollTo(aboutKey),
+                  onTarifTap:     () => _scrollTo(tarifkey),
+                  onContectTap:   () => _scrollTo(contectkey),
+                ),
+              ),
             ),
           ),
-          
-          // 3. SCROLL TO TOP BUTTON
-          _buildScrollToTopButton(),
+
+          // ── 3. SCROLL TO TOP — only rebuilds when show/hide ──
+          Positioned(
+            bottom: 30, right: 30,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _showScrollTop,
+              builder: (_, show, __) => AnimatedOpacity(
+                opacity: show ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: AnimatedScale(
+                  scale: show ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: _buildScrollTopButton(),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildScrollToTopButton() {
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 300),
-      bottom: (scrollController.hasClients && scrollController.offset > 500) ? 30 : -100,
-      right: 30,
-      child: FloatingActionButton(
-        mini: true,
-        elevation: 10,
-        backgroundColor: const Color(0xFF134E4A),
-        onPressed: () => _scrollTo(homeKey),
-        child: const Icon(Icons.arrow_upward, color: Colors.white, size: 20),
+  // ── Scroll To Top Button ──────────────────────────────────────
+  Widget _buildScrollTopButton() {
+    return GestureDetector(
+      onTap: () => scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOutCubic,
+      ),
+      child: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: const Color(0xFFC9A84C),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0x44C9A84C)),
+        ),
+        child: const Icon(
+          Icons.keyboard_arrow_up_rounded,
+          color: Color(0xFF0A0A0A),
+          size: 22,
+        ),
       ),
     );
   }
 
+  // ── Gold Section Divider ──────────────────────────────────────
   Widget _buildSectionDivider() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 60),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 50),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(height: 1, width: 80, color: Colors.grey.withOpacity(0.2)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Icon(Icons.star_rounded, color: Colors.amber.shade700, size: 24),
+          Container(height: 0.5, width: 100,
+              color: const Color(0x22C9A84C)),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            width: 6, height: 6,
+            decoration: const BoxDecoration(
+              color: Color(0xFFC9A84C),
+              shape: BoxShape.circle,
+            ),
           ),
-          Container(height: 1, width: 80, color: Colors.grey.withOpacity(0.2)),
+          Container(height: 0.5, width: 100,
+              color: const Color(0x22C9A84C)),
         ],
       ),
     );
