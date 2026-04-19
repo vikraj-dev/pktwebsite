@@ -23,6 +23,7 @@ class SearchBoxWidget extends StatelessWidget {
   static const Color kTextPrimary = Color(0xFFF0E6C8);
   static const Color kTextMuted   = Color(0xFF6A5C40);
   static const Color kBorder      = Color(0x22C9A84C);
+  static const Color kHintText    = Color(0xFFB09060); 
 
   const SearchBoxWidget({
     super.key,
@@ -66,7 +67,7 @@ class SearchBoxWidget extends StatelessWidget {
                 size: 15,
               ),
               hintText: hint,
-              hintStyle: const TextStyle(color: kTextMuted, fontSize: 12),
+              hintStyle: const TextStyle(color: kHintText, fontSize: 12),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 14),
             ),

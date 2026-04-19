@@ -136,3 +136,28 @@ exports.distanceapi = onRequest({ region: "us-central1" }, (req, res) => {
     .then(response => res.json(response.data))
     .catch(error => res.status(500).json({ error: error.message }));
 });
+
+exports.directionsapi = onRequest({ region: "us-central1" }, async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(204).send("");
+
+  try {
+    const { origin, destination } = req.query;
+
+    if (!origin || !destination) {
+      return res.status(400).json({ error: "Missing origin or destination" });
+    }
+
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${API_KEY}`;
+
+    const response = await axios.get(url);
+
+    res.json(response.data);
+  } catch (error) {
+    console.error("Directions API Error:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
