@@ -13,6 +13,7 @@ import 'header.dart';
 //  - Multiple cars at different depths (parallax feel)
 //  - Gold headlight glow effect
 //  - All existing features intact
+//  - ADDED: Call button (6380177563) — responsive for all screens
 // ══════════════════════════════════════════════════════════════
 
 class Webpage extends StatefulWidget {
@@ -47,7 +48,6 @@ class _WebpageState extends State<Webpage> with TickerProviderStateMixin {
   late final AnimationController _contectAnim;
 
   // ── Car Background AnimationController ───────────────────────
-  // Looping — always moving
   late final AnimationController _carBgAnim;
 
   @override
@@ -62,7 +62,7 @@ class _WebpageState extends State<Webpage> with TickerProviderStateMixin {
     _carBgAnim = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 18),
-    )..repeat(); // Infinite loop
+    )..repeat();
 
     scrollController.addListener(_onScroll);
   }
@@ -121,6 +121,14 @@ class _WebpageState extends State<Webpage> with TickerProviderStateMixin {
     }
   }
 
+  // ── CALL BUTTON — dials 6380177563 ───────────────────────────
+  Future<void> _makeCall() async {
+    final url = Uri.parse('tel:+917667733771');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   Widget _animatedSection({
     required AnimationController controller,
     required Widget child,
@@ -144,12 +152,25 @@ class _WebpageState extends State<Webpage> with TickerProviderStateMixin {
     );
   }
 
+  // ── Responsive breakpoints ────────────────────────────────────
+  bool _isMobile(BuildContext context)  => MediaQuery.of(context).size.width < 600;
+  bool _isTablet(BuildContext context)  => MediaQuery.of(context).size.width >= 600 && MediaQuery.of(context).size.width < 1024;
+  bool _isDesktop(BuildContext context) => MediaQuery.of(context).size.width >= 1024;
+
   // ══════════════════════════════════════════════════════════════
   //  BUILD
   // ══════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
+    final size   = MediaQuery.of(context).size;
+    final mobile  = _isMobile(context);
+    final tablet  = _isTablet(context);
+
+    // FAB button sizing — responsive
+    final double fabSize    = mobile ? 44 : (tablet ? 50 : 54);
+    final double fabBottom  = mobile ? 24 : 30;
+    final double fabLeftRight = mobile ? 16 : 30;
+    final double fabIconSize = mobile ? 20 : (tablet ? 22 : 24);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0A0A),
@@ -157,7 +178,6 @@ class _WebpageState extends State<Webpage> with TickerProviderStateMixin {
         children: [
 
           // ── LAYER 0: LUXURY CAR BACKGROUND (always on) ───────
-          // Positioned behind everything, full screen
           Positioned.fill(
             child: RepaintBoundary(
               child: AnimatedBuilder(
@@ -233,77 +253,91 @@ class _WebpageState extends State<Webpage> with TickerProviderStateMixin {
             ),
           ),
 
-          // ── LAYER 3: WHATSAPP BUTTON ─────────────────────────
-          // ── LAYER 3: WHATSAPP BUTTON (left side, show on scroll) ─────
-Positioned(
-  bottom: 30,
-  left: 30,
-  child: ValueListenableBuilder<bool>(
-    valueListenable: _showScrollTop,
-    builder: (_, show, __) => AnimatedOpacity(
-      opacity: show ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      child: AnimatedScale(
-        scale: show ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        child: GestureDetector(
-          onTap: _openWhatsApp,
-          child: Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFC9A84C),           // ← Gold
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0x44C9A84C)), // ← Gold border
-            ),
-            child: Center(
-              child: CustomPaint(
-                size: const Size(22, 22),
-                painter: _WhatsAppPainter(),
+          // ── LAYER 3: WHATSAPP BUTTON (left side) ─────────────
+          Positioned(
+            bottom: fabBottom,
+            left: fabLeftRight,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _showScrollTop,
+              builder: (_, show, __) => AnimatedOpacity(
+                opacity: show ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: AnimatedScale(
+                  scale: show ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: GestureDetector(
+                    onTap: _openWhatsApp,
+                    child: Container(
+                      width: fabSize, height: fabSize,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC9A84C),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0x44C9A84C)),
+                      ),
+                      child: Center(
+                        child: CustomPaint(
+                          size: Size(fabIconSize, fabIconSize),
+                          painter: _WhatsAppPainter(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
-    ),
-  ),
-),
 
-// ── LAYER 4: SCROLL TO TOP (right side) ──────────────────────
-Positioned(
-  bottom: 30, right: 30,
-  child: ValueListenableBuilder<bool>(
-    valueListenable: _showScrollTop,
-    builder: (_, show, __) => AnimatedOpacity(
-      opacity: show ? 1.0 : 0.0,
-      duration: const Duration(milliseconds: 300),
-      child: AnimatedScale(
-        scale: show ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutCubic,
-        child: GestureDetector(
-          onTap: () => scrollController.animateTo(0,
-            duration: const Duration(milliseconds: 800),
-            curve: Curves.easeInOutCubic,
-          ),
-          child: Container(
-            width: 44, height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFC9A84C),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0x44C9A84C)),
-            ),
-            child: const Icon(
-              Icons.keyboard_arrow_up_rounded,
-              color: Color(0xFF0A0A0A),
-              size: 22,
+          // ── LAYER 4: CALL BUTTON (center-left of right side) ──
+          // Always visible — no scroll condition
+          // Positioned between WhatsApp (left) and ScrollTop (right)
+          Positioned(
+            bottom: fabBottom,
+            left: fabLeftRight + fabSize + (mobile ? 10 : 12),
+            child: _CallButton(
+              onTap: _makeCall,
+              size: fabSize,
+              iconSize: fabIconSize,
             ),
           ),
-        ),
-      ),
-    ),
-  ),
-),
+
+          // ── LAYER 5: SCROLL TO TOP (right side) ──────────────
+          Positioned(
+            bottom: fabBottom,
+            right: fabLeftRight,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _showScrollTop,
+              builder: (_, show, __) => AnimatedOpacity(
+                opacity: show ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: AnimatedScale(
+                  scale: show ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  child: GestureDetector(
+                    onTap: () => scrollController.animateTo(0,
+                      duration: const Duration(milliseconds: 800),
+                      curve: Curves.easeInOutCubic,
+                    ),
+                    child: Container(
+                      width: fabSize, height: fabSize,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFC9A84C),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0x44C9A84C)),
+                      ),
+                      child: Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        color: const Color(0xFF0A0A0A),
+                        size: fabIconSize + 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
         ],
       ),
     );
@@ -331,16 +365,121 @@ Positioned(
 }
 
 // ══════════════════════════════════════════════════════════════
+//  CALL BUTTON WIDGET
+//  - Always visible (no scroll gate)
+//  - Pulses gently to draw attention
+//  - Gold ring matches PKT brand
+//  - Dials tel:+916380177563
+// ══════════════════════════════════════════════════════════════
+
+class _CallButton extends StatefulWidget {
+  final VoidCallback onTap;
+  final double size;
+  final double iconSize;
+
+  const _CallButton({
+    required this.onTap,
+    required this.size,
+    required this.iconSize,
+  });
+
+  @override
+  State<_CallButton> createState() => _CallButtonState();
+}
+
+class _CallButtonState extends State<_CallButton>
+    with SingleTickerProviderStateMixin {
+
+  late final AnimationController _pulse;
+  late final Animation<double> _ring;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: false);
+
+    _ring = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: SizedBox(
+        width: widget.size + 20,
+        height: widget.size + 20,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Pulsing ring
+            AnimatedBuilder(
+              animation: _ring,
+              builder: (_, __) {
+                final double scale = 1.0 + _ring.value * 0.5;
+                final double opacity = (1.0 - _ring.value).clamp(0, 1);
+                return Transform.scale(
+                  scale: scale,
+                  child: Container(
+                    width: widget.size,
+                    height: widget.size,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: Color.fromRGBO(201, 168, 76, opacity * 0.7),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // Main button
+            Container(
+              width: widget.size,
+              height: widget.size,
+              decoration: BoxDecoration(
+                color: const Color(0xFFC9A84C),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0x44C9A84C)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x33C9A84C),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.call_rounded,
+                color: const Color(0xFF0A0A0A),
+                size: widget.iconSize,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
 //  LUXURY CAR BACKGROUND PAINTER
-//  - 3 cars at different scales/depths (parallax layers)
-//  - Front 3D angle view — sedan silhouette
-//  - Each car has gold headlight glow
-//  - Road lines moving (motion feel)
-//  - All very low opacity — content still readable
 // ══════════════════════════════════════════════════════════════
 
 class LuxuryCarBgPainter extends CustomPainter {
-  final double progress; // 0.0 → 1.0 (loops)
+  final double progress;
 
   const LuxuryCarBgPainter({required this.progress});
 
@@ -349,57 +488,40 @@ class LuxuryCarBgPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    // ── Road lines (moving bottom strip) ──────────────────────
     _drawRoadLines(canvas, w, h);
 
-    // ── Car layer 1: large, right side, slow ──────────────────
     final double car1X = w * 0.65 + math.sin(progress * math.pi * 2) * w * 0.04;
     final double car1Y = h * 0.38 + math.cos(progress * math.pi * 2 * 0.7) * h * 0.025;
     _drawCar3D(canvas, car1X, car1Y, scale: 1.0, opacity: 0.09, goldOpacity: 0.18);
 
-    // ── Car layer 2: medium, left side, different phase ────────
     final double car2Phase = (progress + 0.4) % 1.0;
     final double car2X = w * 0.18 + math.sin(car2Phase * math.pi * 2) * w * 0.03;
     final double car2Y = h * 0.62 + math.cos(car2Phase * math.pi * 2) * h * 0.02;
     _drawCar3D(canvas, car2X, car2Y, scale: 0.65, opacity: 0.07, goldOpacity: 0.13);
 
-    // ── Car layer 3: small, center-right, fastest ──────────────
     final double car3Phase = (progress + 0.72) % 1.0;
     final double car3X = w * 0.82 + math.sin(car3Phase * math.pi * 2 * 1.3) * w * 0.05;
     final double car3Y = h * 0.78 + math.cos(car3Phase * math.pi * 2 * 1.3) * h * 0.015;
     _drawCar3D(canvas, car3X, car3Y, scale: 0.40, opacity: 0.06, goldOpacity: 0.10);
 
-    // ── Subtle speed lines (horizontal streaks) ────────────────
     _drawSpeedLines(canvas, w, h);
   }
 
-  // ── Road Lines ───────────────────────────────────────────────
   void _drawRoadLines(Canvas canvas, double w, double h) {
     final paint = Paint()
       ..color = const Color(0x08C9A84C)
       ..strokeWidth = 1.0;
 
-    // Moving dashes — progress drives offset
     final double dashOffset = (progress * 120) % 60;
 
     for (double x = -dashOffset; x < w + 60; x += 60) {
-      canvas.drawLine(
-        Offset(x, h * 0.92),
-        Offset(x + 35, h * 0.92),
-        paint,
-      );
+      canvas.drawLine(Offset(x, h * 0.92), Offset(x + 35, h * 0.92), paint);
     }
-    // Second road line
     for (double x = -(dashOffset + 30) % 60; x < w + 60; x += 60) {
-      canvas.drawLine(
-        Offset(x, h * 0.96),
-        Offset(x + 35, h * 0.96),
-        paint,
-      );
+      canvas.drawLine(Offset(x, h * 0.96), Offset(x + 35, h * 0.96), paint);
     }
   }
 
-  // ── Speed Lines ──────────────────────────────────────────────
   void _drawSpeedLines(Canvas canvas, double w, double h) {
     final paint = Paint()
       ..color = const Color(0x05C9A84C)
@@ -411,16 +533,10 @@ class LuxuryCarBgPainter extends CustomPainter {
       final double phase = (progress + i * 0.2) % 1.0;
       final double xStart = w * (phase - 0.3);
       final double len    = w * 0.25;
-      canvas.drawLine(
-        Offset(xStart, h * yFrac),
-        Offset(xStart + len, h * yFrac),
-        paint,
-      );
+      canvas.drawLine(Offset(xStart, h * yFrac), Offset(xStart + len, h * yFrac), paint);
     }
   }
 
-  // ── 3D Front-Angle Car ────────────────────────────────────────
-  // Draws a luxury sedan from front-left 3/4 view
   void _drawCar3D(
     Canvas canvas,
     double cx,
@@ -429,11 +545,10 @@ class LuxuryCarBgPainter extends CustomPainter {
     required double opacity,
     required double goldOpacity,
   }) {
-    // All measurements relative to scale
-    final double u = scale * 90; // base unit
+    final double u = scale * 90;
 
     final bodyPaint = Paint()
-      ..color = Color.fromRGBO(201, 168, 76, (opacity).clamp(0, 1))
+      ..color = Color.fromRGBO(201, 168, 76, opacity.clamp(0, 1))
       ..style = PaintingStyle.stroke
       ..strokeWidth = scale * 1.2
       ..strokeJoin = StrokeJoin.round
@@ -443,43 +558,30 @@ class LuxuryCarBgPainter extends CustomPainter {
       ..color = Color.fromRGBO(201, 168, 76, (opacity * 0.3).clamp(0, 1))
       ..style = PaintingStyle.fill;
 
-    // ── Body — front 3/4 perspective ─────────────────────────
-    // Car body outline (sedan shape from front-left angle)
-    final bodyPath = Path();
-
-    // Ground level points
     final double gLeft   = cx - u * 0.85;
-    final double gRight  = cx + u * 0.55;
     final double gFront  = cy + u * 0.55;
-    final double gFront2 = cy + u * 0.62;
-
-    // Roof points (3D perspective — right side higher/closer)
     final double rLeft   = cx - u * 0.55;
     final double rRight  = cx + u * 0.30;
     final double rTop    = cy - u * 0.28;
     final double rTop2   = cy - u * 0.22;
-
-    // Hood (front slope)
-    final double hLeft   = cx - u * 0.85;
     final double hRight  = cx + u * 0.55;
     final double hMid    = cy + u * 0.10;
 
-    // Car silhouette path
-    bodyPath.moveTo(gLeft, gFront);                          // bottom-left rear
-    bodyPath.lineTo(gLeft, cy + u * 0.12);                  // rear pillar bottom
-    bodyPath.lineTo(rLeft, rTop + u * 0.05);                // rear roof corner
-    bodyPath.lineTo(cx - u * 0.15, rTop);                   // roof top-left
-    bodyPath.lineTo(rRight, rTop2);                          // roof top-right (perspective)
-    bodyPath.lineTo(cx + u * 0.52, cy - u * 0.02);         // A-pillar right
-    bodyPath.lineTo(hRight, hMid);                           // hood right
-    bodyPath.lineTo(cx + u * 0.55, gFront);                 // front bumper right
-    bodyPath.lineTo(gLeft, gFront);                          // bottom
+    final bodyPath = Path();
+    bodyPath.moveTo(gLeft, gFront);
+    bodyPath.lineTo(gLeft, cy + u * 0.12);
+    bodyPath.lineTo(rLeft, rTop + u * 0.05);
+    bodyPath.lineTo(cx - u * 0.15, rTop);
+    bodyPath.lineTo(rRight, rTop2);
+    bodyPath.lineTo(cx + u * 0.52, cy - u * 0.02);
+    bodyPath.lineTo(hRight, hMid);
+    bodyPath.lineTo(cx + u * 0.55, gFront);
+    bodyPath.lineTo(gLeft, gFront);
     bodyPath.close();
 
     canvas.drawPath(bodyPath, fillPaint);
     canvas.drawPath(bodyPath, bodyPaint);
 
-    // ── Windshield ────────────────────────────────────────────
     final wsPaint = Paint()
       ..color = Color.fromRGBO(201, 168, 76, (opacity * 0.5).clamp(0, 1))
       ..style = PaintingStyle.fill;
@@ -493,28 +595,23 @@ class LuxuryCarBgPainter extends CustomPainter {
     wsPath.close();
     canvas.drawPath(wsPath, wsPaint);
 
-    // ── Front wheel (3D ellipse) ──────────────────────────────
     final wPaint = Paint()
       ..color = Color.fromRGBO(201, 168, 76, (opacity * 0.9).clamp(0, 1))
       ..style = PaintingStyle.stroke
       ..strokeWidth = scale * 2.0;
 
-    // Front wheel
     canvas.save();
     canvas.translate(cx + u * 0.28, gFront - u * 0.01);
-    canvas.scale(1.0, 0.38); // flatten for perspective
+    canvas.scale(1.0, 0.38);
     canvas.drawCircle(Offset.zero, u * 0.22, wPaint);
     canvas.restore();
 
-    // Rear wheel
     canvas.save();
     canvas.translate(cx - u * 0.52, gFront - u * 0.01);
     canvas.scale(1.0, 0.35);
     canvas.drawCircle(Offset.zero, u * 0.20, wPaint);
     canvas.restore();
 
-    // ── Headlight glow (gold) ─────────────────────────────────
-    // Main headlight
     final hlGlow = Paint()
       ..color = Color.fromRGBO(201, 168, 76, goldOpacity)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
@@ -522,13 +619,11 @@ class LuxuryCarBgPainter extends CustomPainter {
     canvas.drawOval(
       Rect.fromCenter(
         center: Offset(cx + u * 0.48, cy + u * 0.08),
-        width:  u * 0.18,
-        height: u * 0.08,
+        width: u * 0.18, height: u * 0.08,
       ),
       hlGlow,
     );
 
-    // Headlight beam cone (subtle)
     final beamPaint = Paint()
       ..color = Color.fromRGBO(201, 168, 76, goldOpacity * 0.4)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
@@ -540,7 +635,6 @@ class LuxuryCarBgPainter extends CustomPainter {
     beamPath.close();
     canvas.drawPath(beamPath, beamPaint);
 
-    // DRL strip (daytime running light)
     final drlPaint = Paint()
       ..color = Color.fromRGBO(201, 168, 76, (goldOpacity * 1.2).clamp(0, 1))
       ..strokeWidth = scale * 1.0
@@ -552,7 +646,6 @@ class LuxuryCarBgPainter extends CustomPainter {
       drlPaint,
     );
 
-    // ── Grille lines (front detail) ───────────────────────────
     final grillPaint = Paint()
       ..color = Color.fromRGBO(201, 168, 76, (opacity * 0.6).clamp(0, 1))
       ..strokeWidth = scale * 0.6;
@@ -566,7 +659,6 @@ class LuxuryCarBgPainter extends CustomPainter {
       );
     }
 
-    // ── Subtle reflection streak on roof ──────────────────────
     final refPaint = Paint()
       ..color = Color.fromRGBO(255, 255, 255, opacity * 0.4)
       ..strokeWidth = scale * 0.5

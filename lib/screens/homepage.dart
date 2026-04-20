@@ -59,9 +59,12 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   LatLng? _dropLatLng;
 
   Timer? _debounce;
-
-  // track in-flight route requests — stale ones get ignored
   int _routeRequestId = 0;
+
+  // ── Responsive helpers ────────────────────────────────────────
+  bool _isMobile(BuildContext ctx)  => MediaQuery.of(ctx).size.width < 600;
+  bool _isTablet(BuildContext ctx)  => MediaQuery.of(ctx).size.width >= 600 && MediaQuery.of(ctx).size.width < 1024;
+  bool _isDesktop(BuildContext ctx) => MediaQuery.of(ctx).size.width >= 1024;
 
   @override
   void initState() {
@@ -149,7 +152,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  PLACE SELECTION — instant marker + parallel distance/route
+  //  PLACE SELECTION
   // ══════════════════════════════════════════════════════════════
 
   Future<void> _selectPlace(String placeId, String description, bool isPickup) async {
@@ -173,7 +176,6 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
       final loc    = data['result']['geometry']['location'];
       final latLng = LatLng(loc['lat'], loc['lng']);
 
-      // STEP 1 — update state + show marker IMMEDIATELY (no waiting)
       setState(() {
         if (isPickup) {
           pickupController.text = description;
@@ -186,9 +188,8 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
         }
       });
       FocusScope.of(context).unfocus();
-      _putMarkersOnMap(); // instant marker, no polyline yet
+      _putMarkersOnMap();
 
-      // STEP 2 — only when both points exist, fire distance + route IN PARALLEL
       if (_pickupLatLng != null && _dropLatLng != null) {
         _routeRequestId++;
         final myId = _routeRequestId;
@@ -203,7 +204,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  INSTANT MARKERS (called before route fetch)
+  //  MARKERS
   // ══════════════════════════════════════════════════════════════
 
   void _putMarkersOnMap() {
@@ -261,13 +262,12 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  ROUTE — cloud fn first, OSRM fallback (FIXED: standard polyline = 1e5)
+  //  ROUTE
   // ══════════════════════════════════════════════════════════════
 
   Future<void> _fetchAndDrawRoute(int requestId) async {
     if (_pickupLatLng == null || _dropLatLng == null) return;
 
-    // ─ Try 1: Google Directions via Cloud Function ─
     try {
       final url = Uri.parse(
           'https://us-central1-pktcalltaxiapp.cloudfunctions.net/directionsapi'
@@ -283,7 +283,6 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
         if (data['status'] == 'OK') {
           final encoded = data['routes']?[0]?['overview_polyline']?['points'] as String?;
           if (encoded != null && encoded.isNotEmpty) {
-            // Google eppovume 1e5 precision thaan
             final pts = _decodePolyline(encoded, 1e5);
             if (pts.length > 2) {
               _drawRoute(pts);
@@ -298,14 +297,12 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
 
     if (_routeRequestId != requestId || !mounted) return;
 
-    // ─ Try 2: OSRM Fallback (FIXED FOR NORTH SIDE ISSUE) ─
     try {
-      // Inga 'polyline6' nu keta thaan OSRM 6-decimal data tharum
       final url = Uri.parse(
           'https://router.project-osrm.org/route/v1/driving/'
           '${_pickupLatLng!.longitude},${_pickupLatLng!.latitude};'
           '${_dropLatLng!.longitude},${_dropLatLng!.latitude}'
-          '?overview=full&geometries=polyline6'); 
+          '?overview=full&geometries=polyline6');
 
       final res = await http.get(url).timeout(const Duration(seconds: 12));
 
@@ -316,11 +313,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
         if (data['code'] == 'Ok') {
           final encoded = data['routes']?[0]?['geometry'] as String?;
           if (encoded != null && encoded.isNotEmpty) {
-            
-            // Inga 1e6 vechu decode pannanum. 
-            // 1e5 vecha thaan points North side-ku thalli pogum. So 1e6 is MUST.
-            final pts = _decodePolyline(encoded, 1e6); 
-            
+            final pts = _decodePolyline(encoded, 1e6);
             if (pts.length > 1) {
               print("OSRM Success: Road-la route varum!");
               _drawRoute(pts);
@@ -338,16 +331,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  POLYLINE DECODER  (Google standard encoding, configurable precision)
-  // ══════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════
-  //  ROUTE — cloud fn first, OSRM fallback (FIXED PRECISION)
-  // ══════════════════════════════════════════════════════════════
-
-  
-
-  // ══════════════════════════════════════════════════════════════
-  //  POLYLINE DECODER (Safe for Flutter Web/Chrome)
+  //  POLYLINE DECODER
   // ══════════════════════════════════════════════════════════════
 
   List<LatLng> _decodePolyline(String encoded, double precision) {
@@ -361,30 +345,22 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
       int b;
       int shift = 0;
       int result = 0;
-      
-      // Latitude decoding
       do {
         b = encoded.codeUnitAt(index++) - 63;
         result |= (b & 0x1f) << shift;
         shift += 5;
       } while (b >= 0x20);
-      
-      // Safe bitwise handling for Web
       int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
-      // Chrome-la bitwise NOT (~) values-ah perusa mathum, so force to 32-bit
-      if (dlat > 2147483647) dlat -= 4294967296; 
+      if (dlat > 2147483647) dlat -= 4294967296;
       lat += dlat;
 
       shift = 0;
       result = 0;
-      
-      // Longitude decoding
       do {
         b = encoded.codeUnitAt(index++) - 63;
         result |= (b & 0x1f) << shift;
         shift += 5;
       } while (b >= 0x20);
-      
       int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
       if (dlng > 2147483647) dlng -= 4294967296;
       lng += dlng;
@@ -395,7 +371,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  DRAW ROUTE (markers + real-road polyline)
+  //  DRAW ROUTE
   // ══════════════════════════════════════════════════════════════
 
   void _drawRoute(List<LatLng> pts) {
@@ -403,7 +379,6 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
     setState(() {
       _markers.clear();
       _polylines.clear();
-
       if (_pickupLatLng != null) {
         _markers.add(Marker(
           markerId: const MarkerId('pickup'),
@@ -450,85 +425,79 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   // ══════════════════════════════════════════════════════════════
 
   void _calculateFare() {
-      if (tariffs.isEmpty || selectedCarIndex == null) {
-        setState(() => fareAmount = null);
+    if (tariffs.isEmpty || selectedCarIndex == null) {
+      setState(() => fareAmount = null);
+      return;
+    }
+
+    final t = tariffs[selectedCarIndex!];
+    double distanceToCharge = 0.0;
+    double cost = (t['cost'] ?? 0).toDouble();
+    double perKm = (t['perKm'] ?? 0).toDouble();
+
+    if (_mainMode.toUpperCase() == 'LOCAL' &&
+        _tripType.toLowerCase().contains('package')) {
+      if (_selectedHours == null) {
+        setState(() { fareAmount = null; displayedKm = 0.0; });
         return;
       }
-
-      final t = tariffs[selectedCarIndex!];
-      double distanceToCharge = 0.0;
-      double cost = (t['cost'] ?? 0).toDouble();
-      double perKm = (t['perKm'] ?? 0).toDouble();
-
-      // Local Package Logic
-      if (_mainMode.toUpperCase() == 'LOCAL' &&
-          _tripType.toLowerCase().contains('package')) {
-        if (_selectedHours == null) {
-          setState(() {
-            fareAmount = null;
-            displayedKm = 0.0;
-          });
-          return;
-        }
-        var hourKey = _selectedHours.toString();
-        var packageMap = t['fullData'] as Map<String, dynamic>;
-        if (packageMap.containsKey(hourKey)) {
-          var selectedPackage = packageMap[hourKey];
-          double amount = (selectedPackage['amount'] ?? 0).toDouble();
-          fareAmount = (amount / 5).ceil() * 5.0;
-          displayedKm = (selectedPackage['uptoKm'] ?? 0).toDouble();
-        }
-        setState(() {});
-        return;
+      var hourKey = _selectedHours.toString();
+      var packageMap = t['fullData'] as Map<String, dynamic>;
+      if (packageMap.containsKey(hourKey)) {
+        var selectedPackage = packageMap[hourKey];
+        double amount = (selectedPackage['amount'] ?? 0).toDouble();
+        fareAmount = (amount / 5).ceil() * 5.0;
+        displayedKm = (selectedPackage['uptoKm'] ?? 0).toDouble();
       }
+      setState(() {});
+      return;
+    }
 
-      if (distanceKm == 0.0) {
-        setState(() => displayedKm = 0.0);
-        return;
-      }
+    if (distanceKm == 0.0) {
+      setState(() => displayedKm = 0.0);
+      return;
+    }
 
-      // Outstation Logic
-      if (_mainMode.toUpperCase() == 'OUTSTATION') {
-        if (_tripType.toLowerCase().contains('one')) {
-          distanceToCharge = distanceKm < 130.0 ? 130.0 : distanceKm;
-          displayedKm = distanceKm;
-          double fare = cost + (distanceToCharge * perKm);
-          fareAmount = (fare / 5).ceil() * 5.0;
-        } else if (_tripType.toLowerCase().contains('round')) {
-          if (selectedDate != null && selectedTime != null && returnDate != null) {
-            DateTime pickupDateTime = DateTime(selectedDate!.year,
-                selectedDate!.month, selectedDate!.day, selectedTime!.hour, selectedTime!.minute);
-            DateTime returnDateTime = DateTime(returnDate!.year,
-                returnDate!.month, returnDate!.day, selectedTime!.hour, selectedTime!.minute);
-            int hourDiff = returnDateTime.difference(pickupDateTime).inHours;
-            int days = (hourDiff / 24).ceil();
-            if (days < 1) days = 1;
-            double minKmPerDay = 250.0;
-            double totalMinKm = days * minKmPerDay;
-            double actualKm = distanceKm * 2;
-            distanceToCharge = actualKm > totalMinKm ? actualKm : totalMinKm;
-            displayedKm = distanceKm;
-            double fare = (cost * days) + (distanceToCharge * perKm);
-            fareAmount = (fare / 5).ceil() * 5.0;
-          }
-        }
-      } else {
-        // Local Drop
-        double minKm = (t['minKm'] ?? 0).toDouble();
-        distanceToCharge = distanceKm < minKm ? minKm : distanceKm;
+    if (_mainMode.toUpperCase() == 'OUTSTATION') {
+      if (_tripType.toLowerCase().contains('one')) {
+        distanceToCharge = distanceKm < 130.0 ? 130.0 : distanceKm;
         displayedKm = distanceKm;
         double fare = cost + (distanceToCharge * perKm);
         fareAmount = (fare / 5).ceil() * 5.0;
+      } else if (_tripType.toLowerCase().contains('round')) {
+        if (selectedDate != null && selectedTime != null && returnDate != null) {
+          DateTime pickupDateTime = DateTime(selectedDate!.year,
+              selectedDate!.month, selectedDate!.day, selectedTime!.hour, selectedTime!.minute);
+          DateTime returnDateTime = DateTime(returnDate!.year,
+              returnDate!.month, returnDate!.day, selectedTime!.hour, selectedTime!.minute);
+          int hourDiff = returnDateTime.difference(pickupDateTime).inHours;
+          int days = (hourDiff / 24).ceil();
+          if (days < 1) days = 1;
+          double minKmPerDay = 250.0;
+          double totalMinKm = days * minKmPerDay;
+          double actualKm = distanceKm * 2;
+          distanceToCharge = actualKm > totalMinKm ? actualKm : totalMinKm;
+          displayedKm = distanceKm;
+          double fare = (cost * days) + (distanceToCharge * perKm);
+          fareAmount = (fare / 5).ceil() * 5.0;
+        }
       }
-      setState(() {});
+    } else {
+      double minKm = (t['minKm'] ?? 0).toDouble();
+      distanceToCharge = distanceKm < minKm ? minKm : distanceKm;
+      displayedKm = distanceKm;
+      double fare = cost + (distanceToCharge * perKm);
+      fareAmount = (fare / 5).ceil() * 5.0;
     }
+    setState(() {});
+  }
 
   // ══════════════════════════════════════════════════════════════
   //  RESET
   // ══════════════════════════════════════════════════════════════
 
   void _resetFields() {
-    _routeRequestId++; // invalidate any in-flight route
+    _routeRequestId++;
     setState(() {
       nameController.clear();    phoneController.clear();
       pickupController.clear();  dropController.clear();
@@ -620,10 +589,11 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
     }
 
     String? constraintError = _validateBookingConstraints();
-  if (constraintError != null) {
-    _showLuxurySnackBar(constraintError, isError: true);
-    return; // Rule satisfy aagala na ingeye function-ah stop panniduvom
-  }
+    if (constraintError != null) {
+      _showLuxurySnackBar(constraintError, isError: true);
+      return;
+    }
+
     try {
       showDialog(
         context: context, barrierDismissible: false,
@@ -697,58 +667,63 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
     print("Validating constraints for $_tripType at $distanceKm km");
   }
 
+  String? _validateBookingConstraints() {
+    double distance = distanceKm;
+    if (distance <= 0) return "Route distance not calculated. Please wait.";
 
+    String type = _tripType.toUpperCase();
+    print("DEBUG: Current Trip Type: $type, Distance: $distance");
 
-String? _validateBookingConstraints() {
-  // Safe-ah double value-ah eduthuko macha
-  double distance = distanceKm; 
-  
-  if (distance <= 0) return "Route distance not calculated. Please wait.";
-
-  // Enum or Dropdown values-ah safe-ah upper case-la check pannu
-  String type = _tripType.toUpperCase();
-
-  print("DEBUG: Current Trip Type: $type, Distance: $distance"); // Debugging-ku logic
-
-  // 1. LOCAL or DROP: Max 100km
-  if (type == 'LOCAL' || type == 'DROP') {
-    if (distance > 100) {
-      return "Local/Drop bookings are limited to 100km. Currently: ${distance.toStringAsFixed(1)}km";
+    if (type == 'LOCAL' || type == 'DROP') {
+      if (distance > 100) {
+        return "Local/Drop bookings are limited to 100km. Currently: ${distance.toStringAsFixed(1)}km";
+      }
     }
-  }
-
-  // 2. ONEWAY: Min 150km
-  if (type =='OUTSTATION' ||  type =='ONEWAY') {
-    if (distance < 150) {
-      return "One-way trips must be at least 150km. Currently: ${distance.toStringAsFixed(1)}km";
+    if (type == 'OUTSTATION' || type == 'ONEWAY') {
+      if (distance < 150) {
+        return "One-way trips must be at least 150km. Currently: ${distance.toStringAsFixed(1)}km";
+      }
     }
-  }
-
-  // 3. ROUNDTRIP: Min 250km
-  if (type =='OUTSTATION' || type == 'ROUNDTRIP') {
-    if (distance < 250) {
-      return "Round-trip bookings must be at least 250km. Currently: ${distance.toStringAsFixed(1)}km";
+    if (type == 'OUTSTATION' || type == 'ROUNDTRIP') {
+      if (distance < 250) {
+        return "Round-trip bookings must be at least 250km. Currently: ${distance.toStringAsFixed(1)}km";
+      }
     }
+    return null;
   }
-
-  return null; 
-}
 
   // ══════════════════════════════════════════════════════════════
-  //  BUILD
+  //  BUILD — RESPONSIVE LAYOUT
   // ══════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
-    final sw = MediaQuery.of(context).size.width;
-    final sh = MediaQuery.of(context).size.height;
+    final sw     = MediaQuery.of(context).size.width;
+    final sh     = MediaQuery.of(context).size.height;
+    final mobile = _isMobile(context);
+    final tablet = _isTablet(context);
 
+    // Mobile & narrow tablet: stacked (form on top, map below)
+    // Wide tablet & desktop:  side-by-side (original layout)
+    if (mobile) {
+      return _buildMobileLayout(sw, sh);
+    } else if (tablet) {
+      return _buildTabletLayout(sw, sh);
+    } else {
+      return _buildDesktopLayout(sw, sh);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  DESKTOP LAYOUT (original — side by side 4:6)
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildDesktopLayout(double sw, double sh) {
     return Material(
       color: kBg,
       child: SizedBox(
         width: sw, height: sh,
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // ── LEFT PANEL ──────────────────────────────────────
           Expanded(
             flex: 4,
             child: Container(
@@ -762,88 +737,217 @@ String? _validateBookingConstraints() {
                 Expanded(child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                   physics: const BouncingScrollPhysics(),
-                  children: [
-                    _buildTripSettings(),
-                    const SizedBox(height: 16),
-                    _buildCustomerInfo(),
-                    const SizedBox(height: 16),
-                    _buildRouteSection(),
-                    const SizedBox(height: 16),
-                    _buildVehicleSection(),
-                    _buildGoldDivider(),
-                    _buildFarePanel(),
-                  ],
+                  children: _formChildren(),
                 )),
               ]),
             ),
           ),
-
-          // ── RIGHT MAP ───────────────────────────────────────
           Expanded(
             flex: 6,
-            child: Container(
+            child: _buildMapPanel(
               margin: const EdgeInsets.fromLTRB(0, 12, 12, 12),
-              decoration: BoxDecoration(
-                color: kPanel, borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kBorder),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(children: [
-                  GoogleMap(
-                    initialCameraPosition: CameraPosition(target: _chennaiCenter, zoom: 12),
-                    onMapCreated: (c) => mapController = c,
-                    markers:   _markers,
-                    polylines: _polylines,
-                    myLocationButtonEnabled: false,
-                    zoomControlsEnabled:     true,
-                    mapType: MapType.normal,
-                  ),
-                  Positioned(top: 16, left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: kPanel.withOpacity(0.92),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: kBorder),
-                      ),
-                      child: Row(children: const [
-                        Icon(Icons.map_outlined, color: kGold, size: 13),
-                        SizedBox(width: 8),
-                        Text('LIVE ROUTE', style: TextStyle(
-                          color: kGold, fontSize: 10,
-                          fontWeight: FontWeight.w700, letterSpacing: 2,
-                        )),
-                      ]),
-                    ),
-                  ),
-                  if (distanceKm > 0)
-                    Positioned(bottom: 20, left: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: kPanel.withOpacity(0.95),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: kBorder),
-                        ),
-                        child: Row(children: [
-                          const Icon(Icons.straighten, color: kGold, size: 13),
-                          const SizedBox(width: 8),
-                          Text('${distanceKm.toStringAsFixed(1)} km',
-                            style: const TextStyle(
-                              color: kGold, fontSize: 13,
-                              fontWeight: FontWeight.w700, letterSpacing: 1,
-                            )),
-                        ]),
-                      ),
-                    ),
-                ]),
-              ),
             ),
           ),
         ]),
       ),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  TABLET LAYOUT (side by side 5:5, slightly compact)
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildTabletLayout(double sw, double sh) {
+    return Material(
+      color: kBg,
+      child: SizedBox(
+        width: sw, height: sh,
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(
+            flex: 5,
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: kPanel, borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: kBorder),
+              ),
+              child: Column(children: [
+                _buildPanelHeader(compact: true),
+                Expanded(child: ListView(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+                  physics: const BouncingScrollPhysics(),
+                  children: _formChildren(compact: true),
+                )),
+              ]),
+            ),
+          ),
+          Expanded(
+            flex: 5,
+            child: _buildMapPanel(
+              margin: const EdgeInsets.fromLTRB(0, 10, 10, 10),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  MOBILE LAYOUT (stacked: form → map)
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildMobileLayout(double sw, double sh) {
+    return Material(
+      color: kBg,
+      child: SizedBox(
+        width: sw,
+        // Let content scroll — no fixed height constraint
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Form Panel ──────────────────────────────────
+              Container(
+                margin: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+                decoration: BoxDecoration(
+                  color: kPanel, borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: kBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildPanelHeader(compact: true),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: _formChildren(compact: true),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ── Map Panel ───────────────────────────────────
+              Container(
+                margin: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                height: 320,
+                decoration: BoxDecoration(
+                  color: kPanel, borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: kBorder),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: Stack(children: [
+                    GoogleMap(
+                      initialCameraPosition: CameraPosition(target: _chennaiCenter, zoom: 12),
+                      onMapCreated: (c) => mapController = c,
+                      markers:   _markers,
+                      polylines: _polylines,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: true,
+                      mapType: MapType.normal,
+                    ),
+                    _mapOverlayBadge(),
+                    if (distanceKm > 0) _mapDistanceBadge(),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  SHARED MAP PANEL (desktop / tablet)
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildMapPanel({required EdgeInsets margin}) {
+    return Container(
+      margin: margin,
+      decoration: BoxDecoration(
+        color: kPanel, borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: kBorder),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(children: [
+          GoogleMap(
+            initialCameraPosition: CameraPosition(target: _chennaiCenter, zoom: 12),
+            onMapCreated: (c) => mapController = c,
+            markers:   _markers,
+            polylines: _polylines,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled:     true,
+            mapType: MapType.normal,
+          ),
+          Positioned(top: 16, left: 16, child: _mapOverlayBadge()),
+          if (distanceKm > 0)
+            Positioned(bottom: 20, left: 16, child: _mapDistanceBadge()),
+        ]),
+      ),
+    );
+  }
+
+  Widget _mapOverlayBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: kPanel.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kBorder),
+      ),
+      child: Row(children: const [
+        Icon(Icons.map_outlined, color: kGold, size: 13),
+        SizedBox(width: 8),
+        Text('LIVE ROUTE', style: TextStyle(
+          color: kGold, fontSize: 10,
+          fontWeight: FontWeight.w700, letterSpacing: 2,
+        )),
+      ]),
+    );
+  }
+
+  Widget _mapDistanceBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: kPanel.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: kBorder),
+      ),
+      child: Row(children: [
+        const Icon(Icons.straighten, color: kGold, size: 13),
+        const SizedBox(width: 8),
+        Text('${distanceKm.toStringAsFixed(1)} km',
+          style: const TextStyle(
+            color: kGold, fontSize: 13,
+            fontWeight: FontWeight.w700, letterSpacing: 1,
+          )),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  FORM CHILDREN (shared by all layouts)
+  // ══════════════════════════════════════════════════════════════
+
+  List<Widget> _formChildren({bool compact = false}) {
+    final double gap = compact ? 12.0 : 16.0;
+    return [
+      _buildTripSettings(compact: compact),
+      SizedBox(height: gap),
+      _buildCustomerInfo(compact: compact),
+      SizedBox(height: gap),
+      _buildRouteSection(compact: compact),
+      SizedBox(height: gap),
+      _buildVehicleSection(compact: compact),
+      _buildGoldDivider(),
+      _buildFarePanel(compact: compact),
+    ];
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -986,18 +1090,25 @@ String? _validateBookingConstraints() {
   //  PANEL SECTIONS
   // ══════════════════════════════════════════════════════════════
 
-  Widget _buildPanelHeader() {
+  Widget _buildPanelHeader({bool compact = false}) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      padding: EdgeInsets.fromLTRB(compact ? 14 : 20, compact ? 14 : 18, compact ? 14 : 20, compact ? 12 : 16),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: kBorder))),
       child: Row(children: [
-        Container(width: 32, height: 32,
+        Container(
+          width: compact ? 28 : 32, height: compact ? 28 : 32,
           decoration: BoxDecoration(color: kGold, borderRadius: BorderRadius.circular(6)),
-          child: const Icon(Icons.directions_car, color: kBg, size: 18)),
+          child: Icon(Icons.directions_car, color: kBg, size: compact ? 15 : 18),
+        ),
         const SizedBox(width: 12),
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [
-          Text('PKT CALL TAXI', style: TextStyle(color: kGold, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 2.5)),
-          Text('Premium Chauffeur Service', style: TextStyle(color: kTextMuted, fontSize: 9, letterSpacing: 1.5)),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('PKT CALL TAXI', style: TextStyle(
+            color: kGold, fontSize: compact ? 11 : 13,
+            fontWeight: FontWeight.w900, letterSpacing: 2.5,
+          )),
+          Text('Premium Chauffeur Service', style: TextStyle(
+            color: kTextMuted, fontSize: compact ? 8 : 9, letterSpacing: 1.5,
+          )),
         ]),
         const Spacer(),
         Container(
@@ -1012,9 +1123,9 @@ String? _validateBookingConstraints() {
     );
   }
 
-  Widget _buildTripSettings() {
+  Widget _buildTripSettings({bool compact = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const SizedBox(height: 16),
+      SizedBox(height: compact ? 12 : 16),
       _sectionLabel('TRIP SETTINGS'),
       Row(children: [
         Expanded(child: _luxuryDropdown(_mainMode, ['LOCAL', 'OUTSTATION'], Icons.route_outlined, (v) {
@@ -1034,7 +1145,7 @@ String? _validateBookingConstraints() {
     ]);
   }
 
-  Widget _buildCustomerInfo() {
+  Widget _buildCustomerInfo({bool compact = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionLabel('PASSENGER DETAILS'),
       _luxuryInput('Passenger Name', nameController, Icons.person_outline),
@@ -1043,7 +1154,7 @@ String? _validateBookingConstraints() {
     ]);
   }
 
-  Widget _buildRouteSection() {
+  Widget _buildRouteSection({bool compact = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionLabel('ROUTE DETAILS'),
       SearchBoxWidget(
@@ -1078,7 +1189,7 @@ String? _validateBookingConstraints() {
     ]);
   }
 
-  Widget _buildVehicleSection() {
+  Widget _buildVehicleSection({bool compact = false}) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionLabel('VEHICLE CLASS'),
       _buildLuxuryVehicleList(),
@@ -1157,7 +1268,7 @@ String? _validateBookingConstraints() {
     );
   }
 
-  Widget _buildFarePanel() {
+  Widget _buildFarePanel({bool compact = false}) {
     return Column(children: [
       Container(
         padding: const EdgeInsets.all(16),

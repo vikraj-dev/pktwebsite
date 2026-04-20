@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 //  LUXURY BLACK & GOLD CONTACT PAGE — PKT CALL TAXI
 //  Logic & Callbacks: 100% untouched
 //  UI: Full Black & Gold luxury redesign
+//  ADDED: Responsive Mobile / Tablet / Desktop
+//         Contact info — driver beta style highlight
 // ══════════════════════════════════════════════════════════════
 
 class Contectpage extends StatelessWidget {
@@ -13,7 +15,6 @@ class Contectpage extends StatelessWidget {
   final VoidCallback onTarifTap;
   final VoidCallback onContactTap;
 
-  // ── Luxury Color Palette ──────────────────────────────────────
   static const Color kBg          = Color(0xFF0A0A0A);
   static const Color kPanel       = Color(0xFF111111);
   static const Color kCardBg      = Color(0xFF161616);
@@ -33,96 +34,142 @@ class Contectpage extends StatelessWidget {
     required this.onContactTap,
   });
 
+  // ── Responsive helpers ────────────────────────────────────────
+  bool _isMobile(BuildContext ctx)  => MediaQuery.of(ctx).size.width < 600;
+  bool _isTablet(BuildContext ctx)  => MediaQuery.of(ctx).size.width >= 600 && MediaQuery.of(ctx).size.width < 1024;
+  bool _isDesktop(BuildContext ctx) => MediaQuery.of(ctx).size.width >= 1024;
+
   @override
   Widget build(BuildContext context) {
+    final mobile = _isMobile(context);
+    final tablet = _isTablet(context);
+
+    final double hPad = mobile ? 20 : (tablet ? 36 : 60);
+    final double vPad = mobile ? 48 : (tablet ? 60 : 80);
+
     return Container(
       key: contectkey,
       width: double.infinity,
       color: kBg,
       child: Column(
         children: [
-          // ── Top gold divider line ───────────────────────────
+          // ── Top gold divider ────────────────────────────────
           Container(height: 1, color: kBorder),
 
-          // ── Main footer content ─────────────────────────────
+          // ── Main content ────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 60),
+            padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1200),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── 1. Brand + Address ──────────────────
-                    _buildBrandColumn(),
-
-                    // ── 2. Quick Links ──────────────────────
-                    _buildFooterColumn(
-                      title: 'Quick Links',
-                      children: [
-                        _buildFooterLink('Home',         onHomeTap),
-                        _buildFooterLink('About Us',     onAboutTap),
-                        _buildFooterLink('Tariff Plan',  onTarifTap),
-                        _buildFooterLink('Contact',      onContactTap),
-                      ],
-                    ),
-
-                    // ── 3. Contact Info ─────────────────────
-                    _buildContactColumn(),
-                  ],
-                ),
+                child: mobile
+                    ? _buildMobileLayout(context)
+                    : tablet
+                        ? _buildTabletLayout(context)
+                        : _buildDesktopLayout(context),
               ),
             ),
           ),
 
-          // ── Bottom copyright bar ────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 60),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: kBorder)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // Logo mark small
-                Row(children: [
-                  Container(
-                    width: 24, height: 24,
-                    decoration: BoxDecoration(
-                      color: kGold,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Icon(Icons.directions_car, color: kBg, size: 14),
-                  ),
-                  const SizedBox(width: 10),
-                  const Text('PKT CALL TAXI', style: TextStyle(
-                    color: kGold, fontSize: 11,
-                    fontWeight: FontWeight.w800, letterSpacing: 2,
-                  )),
-                ]),
-                const Text(
-                  '© 2026 PKT Call Taxi · All Rights Reserved',
-                  style: TextStyle(color: kTextMuted, fontSize: 11, letterSpacing: 0.5),
-                ),
-                Row(children: [
-                  const Text('Made with ', style: TextStyle(color: kTextMuted, fontSize: 11)),
-                  const Icon(Icons.favorite, color: kGold, size: 11),
-                  const Text(' in Tamil Nadu', style: TextStyle(color: kTextMuted, fontSize: 11)),
-                ]),
-              ],
-            ),
-          ),
+          // ── Copyright bar ───────────────────────────────────
+          _buildCopyrightBar(context),
         ],
       ),
     );
   }
 
-  // ── Brand + Address Column ────────────────────────────────────
-  Widget _buildBrandColumn() {
+  // ══════════════════════════════════════════════════════════════
+  //  DESKTOP — 3 columns side by side (original)
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildDesktopLayout(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBrandColumn(context),
+        _buildFooterColumn(
+          title: 'Quick Links',
+          children: [
+            _buildFooterLink('Home',        onHomeTap),
+            _buildFooterLink('About Us',    onAboutTap),
+            _buildFooterLink('Tariff Plan', onTarifTap),
+            _buildFooterLink('Contact',     onContactTap),
+          ],
+        ),
+        _buildContactColumn(context),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  TABLET — brand full width top, then links + contact side by side
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildTabletLayout(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBrandColumn(context, fullWidth: true),
+        const SizedBox(height: 40),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 2,
+              child: _buildFooterColumn(
+                title: 'Quick Links',
+                children: [
+                  _buildFooterLink('Home',        onHomeTap),
+                  _buildFooterLink('About Us',    onAboutTap),
+                  _buildFooterLink('Tariff Plan', onTarifTap),
+                  _buildFooterLink('Contact',     onContactTap),
+                ],
+              ),
+            ),
+            const SizedBox(width: 30),
+            Expanded(
+              flex: 3,
+              child: _buildContactColumn(context, fullWidth: true),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  MOBILE — stacked: brand → links → contact
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildMobileLayout(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildBrandColumn(context, fullWidth: true),
+        const SizedBox(height: 36),
+        _buildFooterColumn(
+          title: 'Quick Links',
+          children: [
+            _buildFooterLink('Home',        onHomeTap),
+            _buildFooterLink('About Us',    onAboutTap),
+            _buildFooterLink('Tariff Plan', onTarifTap),
+            _buildFooterLink('Contact',     onContactTap),
+          ],
+        ),
+        const SizedBox(height: 36),
+        _buildContactColumn(context, fullWidth: true),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  BRAND COLUMN
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildBrandColumn(BuildContext context, {bool fullWidth = false}) {
     return SizedBox(
-      width: 320,
+      width: fullWidth ? double.infinity : 320,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -131,8 +178,7 @@ class Contectpage extends StatelessWidget {
             Container(
               width: 40, height: 40,
               decoration: BoxDecoration(
-                color: kGold,
-                borderRadius: BorderRadius.circular(8),
+                color: kGold, borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.directions_car, color: kBg, size: 22),
             ),
@@ -152,9 +198,8 @@ class Contectpage extends StatelessWidget {
             ),
           ]),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
 
-          // Address text
           const Text(
             'We, PKT Call Taxi, situated at Pattukkottai, Tamil Nadu, have a profound understanding of our consumers travel needs and preferences. We aim to offer individuals as well as corporate a wide range of cars on hire.',
             style: TextStyle(
@@ -163,19 +208,17 @@ class Contectpage extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
 
-          // Phone number
-          
-
-          const SizedBox(height: 28),
-
-          // Social / badge row
-          Row(children: [
-            _buildBadge(Icons.verified, '4.9★ Rated'),
-            const SizedBox(width: 10),
-            _buildBadge(Icons.access_time, '24/7 Service'),
-          ]),
+          // Badges
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _buildBadge(Icons.verified, '4.9★ Rated'),
+              _buildBadge(Icons.access_time, '24/7 Service'),
+            ],
+          ),
         ],
       ),
     );
@@ -199,7 +242,10 @@ class Contectpage extends StatelessWidget {
     );
   }
 
-  // ── Quick Links Column ────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  //  QUICK LINKS COLUMN
+  // ══════════════════════════════════════════════════════════════
+
   Widget _buildFooterColumn({
     required String title,
     required List<Widget> children,
@@ -214,38 +260,96 @@ class Contectpage extends StatelessWidget {
     );
   }
 
-  // ── Contact Info Column ───────────────────────────────────────
-  Widget _buildContactColumn() {
+  // ══════════════════════════════════════════════════════════════
+  //  CONTACT COLUMN — highlighted driver beta style
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildContactColumn(BuildContext context, {bool fullWidth = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle('Contact Us'),
-        const SizedBox(height: 28),
+        const SizedBox(height: 24),
+
         Container(
-          width: 320,
-          padding: const EdgeInsets.all(24),
+          width: fullWidth ? double.infinity : 320,
           decoration: BoxDecoration(
             color: kCardBg,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: kBorder),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: kGold.withOpacity(0.4), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: kGold.withOpacity(0.08),
+                blurRadius: 24,
+                spreadRadius: 2,
+              ),
+            ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Email
-              _contactRow(Icons.email_rounded, 'info@pktcalltaxi.com'),
-              _goldDivider(),
 
-              // Phone numbers
-              _contactRow(Icons.phone_android_rounded, '76677 33771'),
-              const SizedBox(height: 14),
-              _contactRow(Icons.phone_android_rounded, '98942 04941'),
-              const SizedBox(height: 14),
-              _contactRow(Icons.phone_in_talk_rounded,  '0437 3252785'),
-              _goldDivider(),
+              // ── Phone numbers — big highlight block ──────────
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      kGold.withOpacity(0.15),
+                      kGold.withOpacity(0.05),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft:  Radius.circular(13),
+                    topRight: Radius.circular(13),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Section label pill
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: kGold.withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'CALL US NOW',
+                        style: TextStyle(
+                          color: kGold, fontSize: 9,
+                          fontWeight: FontWeight.w900, letterSpacing: 2.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
 
-              // Location
-              _contactRow(Icons.location_on_rounded, 'Pattukkottai, Tamil Nadu'),
+                    // Phone 1 — big highlight
+                    _highlightPhoneRow(Icons.phone_android_rounded, '76677 33771', isPrimary: true),
+                    const SizedBox(height: 12),
+                    _highlightPhoneRow(Icons.phone_android_rounded, '98942 04941', isPrimary: false),
+                    const SizedBox(height: 12),
+                    _highlightPhoneRow(Icons.phone_in_talk_rounded,  '0437 3252785', isPrimary: false),
+                  ],
+                ),
+              ),
+
+              // ── Divider ──────────────────────────────────────
+              Container(height: 1, color: kBorder),
+
+              // ── Email + Location — standard rows ─────────────
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    _contactRow(Icons.email_rounded,       'info@pktcalltaxi.com'),
+                    _goldDivider(),
+                    _contactRow(Icons.location_on_rounded, 'Pattukkottai, Tamil Nadu'),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -253,7 +357,152 @@ class Contectpage extends StatelessWidget {
     );
   }
 
-  // ── Reusable Widgets ──────────────────────────────────────────
+  // ── Highlighted phone row (driver beta style) ─────────────────
+  Widget _highlightPhoneRow(IconData icon, String number, {required bool isPrimary}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isPrimary ? 14 : 10,
+        vertical:   isPrimary ? 12 : 9,
+      ),
+      decoration: BoxDecoration(
+        color: isPrimary ? kGold.withOpacity(0.18) : kGold.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isPrimary ? kGold.withOpacity(0.55) : kBorder,
+          width: isPrimary ? 1.0 : 0.5,
+        ),
+        boxShadow: isPrimary
+            ? [BoxShadow(color: kGold.withOpacity(0.15), blurRadius: 12)]
+            : [],
+      ),
+      child: Row(children: [
+        Container(
+          width: isPrimary ? 36 : 30,
+          height: isPrimary ? 36 : 30,
+          decoration: BoxDecoration(
+            color: isPrimary ? kGold.withOpacity(0.25) : kGold.withOpacity(0.10),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: kGold, size: isPrimary ? 17 : 14),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            number,
+            style: TextStyle(
+              color: isPrimary ? kGold : kTextPrimary,
+              fontSize: isPrimary ? 18 : 14,
+              fontWeight: isPrimary ? FontWeight.w900 : FontWeight.w600,
+              letterSpacing: isPrimary ? 1.5 : 0.5,
+              shadows: isPrimary
+                  ? [const Shadow(color: Color(0xFFC9A84C), blurRadius: 12)]
+                  : null,
+            ),
+          ),
+        ),
+        if (isPrimary)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: kGold,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text(
+              'PRIMARY',
+              style: TextStyle(
+                color: kBg, fontSize: 8,
+                fontWeight: FontWeight.w900, letterSpacing: 1.5,
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  COPYRIGHT BAR — responsive
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildCopyrightBar(BuildContext context) {
+    final mobile = _isMobile(context);
+    final double hPad = mobile ? 20 : 60;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        vertical: mobile ? 16 : 20,
+        horizontal: hPad,
+      ),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: kBorder)),
+      ),
+      child: mobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Logo mark
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Container(
+                    width: 22, height: 22,
+                    decoration: BoxDecoration(
+                      color: kGold, borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Icon(Icons.directions_car, color: kBg, size: 13),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('PKT CALL TAXI', style: TextStyle(
+                    color: kGold, fontSize: 10,
+                    fontWeight: FontWeight.w800, letterSpacing: 2,
+                  )),
+                ]),
+                const SizedBox(height: 10),
+                const Text(
+                  '© 2026 PKT Call Taxi · All Rights Reserved',
+                  style: TextStyle(color: kTextMuted, fontSize: 10, letterSpacing: 0.3),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                  Text('Made with ', style: TextStyle(color: kTextMuted, fontSize: 10)),
+                  Icon(Icons.favorite, color: kGold, size: 10),
+                  Text(' in Tamil Nadu', style: TextStyle(color: kTextMuted, fontSize: 10)),
+                ]),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(children: [
+                  Container(
+                    width: 24, height: 24,
+                    decoration: BoxDecoration(
+                      color: kGold, borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Icon(Icons.directions_car, color: kBg, size: 14),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text('PKT CALL TAXI', style: TextStyle(
+                    color: kGold, fontSize: 11,
+                    fontWeight: FontWeight.w800, letterSpacing: 2,
+                  )),
+                ]),
+                const Text(
+                  '© 2026 PKT Call Taxi · All Rights Reserved',
+                  style: TextStyle(color: kTextMuted, fontSize: 11, letterSpacing: 0.5),
+                ),
+                Row(children: const [
+                  Text('Made with ', style: TextStyle(color: kTextMuted, fontSize: 11)),
+                  Icon(Icons.favorite, color: kGold, size: 11),
+                  Text(' in Tamil Nadu', style: TextStyle(color: kTextMuted, fontSize: 11)),
+                ]),
+              ],
+            ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  REUSABLE WIDGETS
+  // ══════════════════════════════════════════════════════════════
 
   Widget _buildSectionTitle(String title) {
     return Column(
@@ -270,8 +519,7 @@ class Contectpage extends StatelessWidget {
         Container(
           height: 1.5, width: 36,
           decoration: BoxDecoration(
-            color: kGold,
-            borderRadius: BorderRadius.circular(2),
+            color: kGold, borderRadius: BorderRadius.circular(2),
           ),
         ),
       ],

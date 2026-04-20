@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 //  Tabs: Oneway | Roundtrip | Local Drop
 //  Logic: Firebase dynamic fetch — all 3 types
 //  UI: 100% luxury black & gold — untouched
+//  ADDED: Responsive Mobile/Tablet/Desktop + Amount highlight
 // ══════════════════════════════════════════════════════════════
 
 class TarifPage extends StatefulWidget {
@@ -28,6 +29,11 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
   static const Color kTextMuted   = Color(0xFF6A5C40);
   static const Color kBorder      = Color(0x22C9A84C);
   static const Color kBorderHov   = Color(0x66C9A84C);
+
+  // ── Responsive helpers ────────────────────────────────────────
+  bool _isMobile(BuildContext ctx)  => MediaQuery.of(ctx).size.width < 600;
+  bool _isTablet(BuildContext ctx)  => MediaQuery.of(ctx).size.width >= 600 && MediaQuery.of(ctx).size.width < 1024;
+  bool _isDesktop(BuildContext ctx) => MediaQuery.of(ctx).size.width >= 1024;
 
   // ── State ─────────────────────────────────────────────────────
   String selectedTarif  = 'oneway';
@@ -159,6 +165,13 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = _isMobile(context);
+    final tablet = _isTablet(context);
+
+    final double vTop       = mobile ? 50 : 80;
+    final double headingFs  = mobile ? 24 : (tablet ? 30 : 38);
+    final double subHPad    = mobile ? 20 : 40;
+
     return Container(
       key: widget.tarifkey,
       width: double.infinity,
@@ -189,7 +202,7 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
 
           Column(
             children: [
-              const SizedBox(height: 80),
+              SizedBox(height: vTop),
 
               // Section tag
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -205,10 +218,16 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
 
               const SizedBox(height: 28),
 
-              // 3-tab toggle
-              _buildTarifSelector(),
+              // 3-tab toggle — scrollable on mobile
+              mobile
+                  ? SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildTarifSelector(),
+                    )
+                  : _buildTarifSelector(),
 
-              const SizedBox(height: 50),
+              const SizedBox(height: 40),
 
               // Heading — animated on switch
               AnimatedSwitcher(
@@ -218,22 +237,30 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
                 child: Column(
                   key: ValueKey(selectedTarif),
                   children: [
-                    Text(
-                      _headingText(),
-                      style: const TextStyle(
-                        fontSize: 38, fontWeight: FontWeight.w900,
-                        color: kTextPrimary, letterSpacing: -0.5,
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: subHPad),
+                      child: Text(
+                        _headingText(),
+                        style: TextStyle(
+                          fontSize: headingFs,
+                          fontWeight: FontWeight.w900,
+                          color: kTextPrimary,
+                          letterSpacing: -0.5,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
                     const SizedBox(height: 16),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
+                      padding: EdgeInsets.symmetric(horizontal: subHPad),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 700),
                         child: Text(
                           _subText(),
-                          style: const TextStyle(
-                            fontSize: 15, color: kTextMuted, height: 1.7,
+                          style: TextStyle(
+                            fontSize: mobile ? 13 : 15,
+                            color: kTextMuted,
+                            height: 1.7,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -243,11 +270,11 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
                 ),
               ),
 
-              const SizedBox(height: 70),
+              SizedBox(height: mobile ? 40 : 70),
 
               // Cards
               if (isLoading)
-                _buildLoadingShimmer()
+                _buildLoadingShimmer(context)
               else if (_currentTariffs.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 40),
@@ -264,34 +291,66 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
               else
                 FadeTransition(
                   opacity: _fadeAnim,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (constraints.maxWidth < 1100) {
-                        return Column(
-                          children: List.generate(
-                            _currentTariffs.length,
-                            (i) => _buildCarCard(i, true),
-                          ),
-                        );
-                      }
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: List.generate(
-                          _currentTariffs.length,
-                          (i) => _buildCarCard(i, false),
-                        ),
-                      );
-                    },
-                  ),
+                  child: _buildCardGrid(context),
                 ),
 
-              const SizedBox(height: 100),
+              SizedBox(height: mobile ? 60 : 100),
             ],
           ),
         ],
       ),
     );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  CARD GRID — responsive
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildCardGrid(BuildContext context) {
+    final mobile = _isMobile(context);
+    final tablet = _isTablet(context);
+
+    if (mobile) {
+      // Mobile: single column, centered
+      return Column(
+        children: List.generate(
+          _currentTariffs.length,
+          (i) => Center(child: _buildCarCard(context, i, isMobile: true)),
+        ),
+      );
+    } else if (tablet) {
+      // Tablet: 2 columns grid
+      final items = _currentTariffs;
+      final rows  = (items.length / 2).ceil();
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          children: List.generate(rows, (row) {
+            final first  = row * 2;
+            final second = first + 1;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildCarCard(context, first, isMobile: false, cardWidth: 280),
+                if (second < items.length)
+                  _buildCarCard(context, second, isMobile: false, cardWidth: 280),
+              ],
+            );
+          }),
+        ),
+      );
+    } else {
+      // Desktop: original row layout
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(
+          _currentTariffs.length,
+          (i) => _buildCarCard(context, i, isMobile: false),
+        ),
+      );
+    }
   }
 
   // ── Heading helpers ───────────────────────────────────────────
@@ -315,23 +374,38 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
   }
 
   // ── Loading shimmer ───────────────────────────────────────────
-  Widget _buildLoadingShimmer() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(3, (i) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        width: 280, height: 380,
-        decoration: BoxDecoration(
-          color: kCardBg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: kBorder),
-        ),
-        child: const Center(
-          child: CircularProgressIndicator(
-              color: kGold, strokeWidth: 1.5),
-        ),
-      )),
-    );
+  Widget _buildLoadingShimmer(BuildContext context) {
+    final mobile = _isMobile(context);
+    return mobile
+        ? Column(
+            children: List.generate(2, (i) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              width: double.infinity, height: 300,
+              decoration: BoxDecoration(
+                color: kCardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kBorder),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(color: kGold, strokeWidth: 1.5),
+              ),
+            )),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(3, (i) => Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12),
+              width: 280, height: 380,
+              decoration: BoxDecoration(
+                color: kCardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: kBorder),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(color: kGold, strokeWidth: 1.5),
+              ),
+            )),
+          );
   }
 
   // ── 3-Tab Toggle ─────────────────────────────────────────────
@@ -346,12 +420,9 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildToggleButton(
-              'oneway', 'Oneway', Icons.arrow_forward_outlined),
-          _buildToggleButton(
-              'roundtrip', 'Roundtrip', Icons.sync_outlined),
-          _buildToggleButton(
-              'drop', 'Local Drop', Icons.location_on_outlined),
+          _buildToggleButton('oneway',    'Oneway',    Icons.arrow_forward_outlined),
+          _buildToggleButton('roundtrip', 'Roundtrip', Icons.sync_outlined),
+          _buildToggleButton('drop',      'Local Drop', Icons.location_on_outlined),
         ],
       ),
     );
@@ -365,7 +436,7 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 280),
         curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected ? kGold : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
@@ -373,8 +444,7 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                color: isSelected ? kBg : kTextMuted, size: 13),
+            Icon(icon, color: isSelected ? kBg : kTextMuted, size: 13),
             const SizedBox(width: 7),
             Text(
               label,
@@ -391,8 +461,16 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
     );
   }
 
-  // ── Car Card ──────────────────────────────────────────────────
-  Widget _buildCarCard(int index, bool isMobile) {
+  // ══════════════════════════════════════════════════════════════
+  //  CAR CARD
+  // ══════════════════════════════════════════════════════════════
+
+  Widget _buildCarCard(
+    BuildContext context,
+    int index, {
+    required bool isMobile,
+    double? cardWidth,
+  }) {
     final tariff   = _currentTariffs[index];
     final category = tariff['category'] as String;
     final perKm    = tariff['perKm']    as double;
@@ -400,26 +478,23 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
     final cost     = tariff['cost']     as double;
 
     final bool isFeatured = index == 1;
-    final bool hovering =
-        index < isHovering.length ? isHovering[index] : false;
+    final bool hovering   = index < isHovering.length ? isHovering[index] : false;
+
+    final double width = cardWidth ?? (isMobile ? 320 : 290);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(16, isFeatured ? 0 : 20, 16, 20),
       child: MouseRegion(
         onEnter: (_) {
-          if (index < isHovering.length) {
-            setState(() => isHovering[index] = true);
-          }
+          if (index < isHovering.length) setState(() => isHovering[index] = true);
         },
         onExit: (_) {
-          if (index < isHovering.length) {
-            setState(() => isHovering[index] = false);
-          }
+          if (index < isHovering.length) setState(() => isHovering[index] = false);
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 280),
           curve: Curves.easeOutCubic,
-          width: isMobile ? 340 : 290,
+          width: width,
           transform: Matrix4.translationValues(0, hovering ? -8 : 0, 0),
           decoration: BoxDecoration(
             color: isFeatured ? kPanel : kCardBg,
@@ -458,12 +533,12 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
                 ),
 
               Padding(
-                padding: const EdgeInsets.all(28),
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
                     // Car image
                     SizedBox(
-                      height: 130,
+                      height: 120,
                       child: Image.asset(
                         vehicleImages[category] ?? 'assets/sedan.png',
                         fit: BoxFit.contain,
@@ -474,24 +549,20 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
                       ),
                     ),
 
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 20),
 
                     // Gold divider
                     Row(children: [
-                      Expanded(
-                          child: Container(height: 0.5, color: kBorder)),
+                      Expanded(child: Container(height: 0.5, color: kBorder)),
                       Container(
-                        margin:
-                            const EdgeInsets.symmetric(horizontal: 10),
+                        margin: const EdgeInsets.symmetric(horizontal: 10),
                         width: 5, height: 5,
-                        decoration: const BoxDecoration(
-                            color: kGold, shape: BoxShape.circle),
+                        decoration: const BoxDecoration(color: kGold, shape: BoxShape.circle),
                       ),
-                      Expanded(
-                          child: Container(height: 0.5, color: kBorder)),
+                      Expanded(child: Container(height: 0.5, color: kBorder)),
                     ]),
 
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
 
                     // Friendly name
                     Text(
@@ -506,8 +577,7 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
 
                     // Category badge
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                       decoration: BoxDecoration(
                         color: kGold.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(4),
@@ -522,115 +592,148 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
                       ),
                     ),
 
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 20),
 
-                    // ── Price block — Firebase dynamic ──────────
+                    // ══════════════════════════════════════════
+                    //  PRICE BLOCK — HIGHLIGHTED (driver beta style)
+                    // ══════════════════════════════════════════
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: Container(
                         key: ValueKey('$selectedTarif-$category'),
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 14, horizontal: 16),
                         decoration: BoxDecoration(
-                          color: kGold.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: kBorder),
+                          // Glowing gold border for the whole price block
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: kGold.withOpacity(0.5), width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: kGold.withOpacity(0.12),
+                              blurRadius: 20,
+                              spreadRadius: 2,
+                            ),
+                          ],
                         ),
                         child: Column(
                           children: [
-                            // Per km — big number
-                            Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center,
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                const Text('₹ ', style: TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.w600,
-                                  color: kGoldDim,
-                                )),
-                                Text(
-                                  perKm.toStringAsFixed(0),
-                                  style: const TextStyle(
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.w900,
-                                    color: kGold, letterSpacing: -1,
-                                  ),
+
+                            // ── Per KM — Big glowing highlight ──
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    kGold.withOpacity(0.18),
+                                    kGold.withOpacity(0.07),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
                                 ),
-                                const Text(' / km', style: TextStyle(
-                                  fontSize: 12, color: kTextMuted,
-                                  letterSpacing: 0.5,
-                                )),
-                              ],
+                                borderRadius: const BorderRadius.only(
+                                  topLeft:  Radius.circular(11),
+                                  topRight: Radius.circular(11),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  // Label above
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: kGold.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Text(
+                                      'PER KM RATE',
+                                      style: TextStyle(
+                                        color: kGold,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 2.5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  // Big ₹ amount
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                                    textBaseline: TextBaseline.alphabetic,
+                                    children: [
+                                      const Text(
+                                        '₹ ',
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          color: kGold,
+                                        ),
+                                      ),
+                                      Text(
+                                        perKm.toStringAsFixed(0),
+                                        style: const TextStyle(
+                                          fontSize: 48,
+                                          fontWeight: FontWeight.w900,
+                                          color: kGold,
+                                          letterSpacing: -2,
+                                          shadows: [
+                                            Shadow(
+                                              color: Color(0xFFC9A84C),
+                                              blurRadius: 20,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Text(
+                                        ' /km',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: kGoldDim,
+                                          letterSpacing: 0.5,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
 
-                            // Base fare row
-                            if (cost > 0) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                height: 0.5, color: kBorder,
-                                margin: const EdgeInsets.symmetric(
-                                    horizontal: 8),
+                            // ── Base fare + Min km rows ──────────
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: kGold.withOpacity(0.05),
+                                borderRadius: const BorderRadius.only(
+                                  bottomLeft:  Radius.circular(11),
+                                  bottomRight: Radius.circular(11),
+                                ),
                               ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
+                              child: Column(
                                 children: [
-                                  Row(children: const [
-                                    Icon(Icons.flag_outlined,
-                                        color: kTextMuted, size: 11),
-                                    SizedBox(width: 5),
-                                    Text('Base fare',
-                                        style: TextStyle(
-                                          color: kTextMuted,
-                                          fontSize: 10,
-                                          letterSpacing: 0.3,
-                                        )),
-                                  ]),
-                                  Text(
-                                    '₹ ${cost.toStringAsFixed(0)}',
-                                    style: const TextStyle(
-                                      color: kGoldDim, fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
+                                  // Base fare
+                                  if (cost > 0) ...[
+                                    _highlightRow(
+                                      icon: Icons.flag_outlined,
+                                      label: 'Base Fare',
+                                      value: '₹ ${cost.toStringAsFixed(0)}',
+                                      isHighlight: true,
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                    if (minKm > 0) const SizedBox(height: 8),
+                                  ],
 
-                            // Min km row
-                            if (minKm > 0) ...[
-                              const SizedBox(height: 6),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(children: const [
-                                    Icon(Icons.straighten,
-                                        color: kTextMuted, size: 11),
-                                    SizedBox(width: 5),
-                                    Text('Min km',
-                                        style: TextStyle(
-                                          color: kTextMuted,
-                                          fontSize: 10,
-                                          letterSpacing: 0.3,
-                                        )),
-                                  ]),
-                                  Text(
-                                    '${minKm.toStringAsFixed(0)} km',
-                                    style: const TextStyle(
-                                      color: kGoldDim, fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
+                                  // Min km
+                                  if (minKm > 0)
+                                    _highlightRow(
+                                      icon: Icons.straighten,
+                                      label: 'Min Distance',
+                                      value: '${minKm.toStringAsFixed(0)} km',
+                                      isHighlight: true,
                                     ),
-                                  ),
                                 ],
                               ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
@@ -647,6 +750,60 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+  }
+
+  // ── Highlighted info row ──────────────────────────────────────
+  Widget _highlightRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required bool isHighlight,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(children: [
+          Container(
+            width: 26, height: 26,
+            decoration: BoxDecoration(
+              color: isHighlight ? kGold.withOpacity(0.15) : kGold.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, color: isHighlight ? kGold : kGoldDim, size: 12),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: isHighlight ? kTextPrimary : kTextMuted,
+              fontSize: 11,
+              fontWeight: isHighlight ? FontWeight.w600 : FontWeight.w400,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ]),
+        // Value pill
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isHighlight ? kGold.withOpacity(0.18) : kGold.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isHighlight ? kGold.withOpacity(0.5) : kBorder,
+            ),
+          ),
+          child: Text(
+            value,
+            style: TextStyle(
+              color: isHighlight ? kGold : kGoldDim,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -679,12 +836,13 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
                   child: const Icon(Icons.check, color: kGold, size: 10),
                 ),
                 const SizedBox(width: 10),
-                Text(f,
-                    style: const TextStyle(
-                      color: kTextMuted, fontSize: 12, letterSpacing: 0.3,
-                    )),
+                Text(f, style: const TextStyle(
+                  color: kTextMuted, fontSize: 12, letterSpacing: 0.3,
+                )),
               ]),
             ))
         .toList();
+
   }
 }
+
