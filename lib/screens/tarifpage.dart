@@ -619,121 +619,109 @@ class _TarifPageState extends State<TarifPage> with TickerProviderStateMixin {
 
                             // ── Per KM — Big glowing highlight ──
                             Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    kGold.withOpacity(0.18),
-                                    kGold.withOpacity(0.07),
-                                  ],
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                ),
-                                borderRadius: const BorderRadius.only(
-                                  topLeft:  Radius.circular(11),
-                                  topRight: Radius.circular(11),
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  // Label above
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: kGold.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Text(
-                                      'PER KM RATE',
-                                      style: TextStyle(
-                                        color: kGold,
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 2.5,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  // Big ₹ amount
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                                    textBaseline: TextBaseline.alphabetic,
-                                    children: [
-                                      const Text(
-                                        '₹ ',
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                          color: kGold,
-                                        ),
-                                      ),
-                                      Text(
-                                        perKm.toStringAsFixed(0),
-                                        style: const TextStyle(
-                                          fontSize: 48,
-                                          fontWeight: FontWeight.w900,
-                                          color: kGold,
-                                          letterSpacing: -2,
-                                          shadows: [
-                                            Shadow(
-                                              color: Color(0xFFC9A84C),
-                                              blurRadius: 20,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Text(
-                                        ' /km',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: kGoldDim,
-                                          letterSpacing: 0.5,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
+  width: double.infinity,
+  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+  decoration: const BoxDecoration(
+    color: kPanel,
+    borderRadius: BorderRadius.only(
+      topLeft:  Radius.circular(11),
+      topRight: Radius.circular(11),
+    ),
+  ),
+  child: Column(
+    children: [
+      // Label above
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: kCardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: kBorderHov, width: 0.5),
+        ),
+        child: const Text(
+          'PER KM RATE',
+          style: TextStyle(
+            color: kTextMuted,
+            fontSize: 8,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.5,
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      // Big ₹ amount — white highlight
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          const Text(
+            '₹ ',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: kTextPrimary,
+            ),
+          ),
+          Text(
+            perKm.toStringAsFixed(0),
+            style: const TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.w900,
+              color: kTextPrimary,
+              letterSpacing: -2,
+            ),
+          ),
+          const Text(
+            ' /km',
+            style: TextStyle(
+              fontSize: 13,
+              color: kTextMuted,
+              letterSpacing: 0.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ],
+  ),
+),
 
                             // ── Base fare + Min km rows ──────────
                             Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: kGold.withOpacity(0.05),
-                                borderRadius: const BorderRadius.only(
-                                  bottomLeft:  Radius.circular(11),
-                                  bottomRight: Radius.circular(11),
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  // Base fare
-                                  if (cost > 0) ...[
-                                    _highlightRow(
-                                      icon: Icons.flag_outlined,
-                                      label: 'Base Fare',
-                                      value: '₹ ${cost.toStringAsFixed(0)}',
-                                      isHighlight: true,
-                                    ),
-                                    if (minKm > 0) const SizedBox(height: 8),
-                                  ],
+  width: double.infinity,
+  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+  decoration: const BoxDecoration(
+    color: kCardBg,
+    borderRadius: BorderRadius.only(
+      bottomLeft:  Radius.circular(11),
+      bottomRight: Radius.circular(11),
+    ),
+  ),
+  child: Column(
+    children: [
+      // Base fare
+      if (cost > 0) ...[
+        _highlightRow(
+          icon: Icons.flag_outlined,
+          label: 'Base Fare',
+          value: '₹ ${cost.toStringAsFixed(0)}',
+          isHighlight: true,
+        ),
+        if (minKm > 0) const SizedBox(height: 8),
+      ],
 
-                                  // Min km
-                                  if (minKm > 0)
-                                    _highlightRow(
-                                      icon: Icons.straighten,
-                                      label: 'Min Distance',
-                                      value: '${minKm.toStringAsFixed(0)} km',
-                                      isHighlight: true,
-                                    ),
-                                ],
-                              ),
-                            ),
+      // Min km
+      if (minKm > 0)
+        _highlightRow(
+          icon: Icons.straighten,
+          label: 'Min Distance',
+          value: '${minKm.toStringAsFixed(0)} km',
+          isHighlight: true,
+        ),
+    ],
+  ),
+),
                           ],
                         ),
                       ),

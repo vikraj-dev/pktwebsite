@@ -8,6 +8,8 @@ import 'package:pktwebsite/widgets/search_box_widget.dart';
 import 'package:dropdown_button2/dropdown_button2.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:pktwebsite/widgets/send_driver_push_notification.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart'; // for kIsWeb
 
 class Homepage extends StatefulWidget {
   const Homepage({super.key});
@@ -17,6 +19,7 @@ class Homepage extends StatefulWidget {
 }
 
 class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
+  ConfirmationResult? _webConfirmationResult;
   static const Color kBg          = Color(0xFF0A0A0A);
   static const Color kPanel       = Color(0xFF111111);
   static const Color kCardBg      = Color(0xFF161616);
@@ -34,8 +37,8 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   final pickupController = TextEditingController();
   final dropController   = TextEditingController();
 
-  String _mainMode    = 'LOCAL';
-  String _tripType    = 'Drop';
+  String _mainMode    = 'OUTSTATION';
+String _tripType    = 'OneWay';
   double distanceKm   = 0.0;
   double displayedKm  = 0.0;
   double? fareAmount;
@@ -45,6 +48,11 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   TimeOfDay? selectedTime;
   DateTime?  returnDate;
   DateTime?  selectedDate;
+
+  // ── OTP state ────────────────────────────────────────────────
+  bool    _isPhoneVerified  = false;
+  String? _otpVerificationId;
+  int?    _otpResendToken;
 
   List<Map<String, dynamic>> tariffs = [];
   StreamSubscription<QuerySnapshot>? _tariffSub;
@@ -61,7 +69,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   Timer? _debounce;
   int _routeRequestId = 0;
 
-  // ── Responsive helpers ────────────────────────────────────────
+  // ── Responsive helpers ────────────────────────────────────────────
   bool _isMobile(BuildContext ctx)  => MediaQuery.of(ctx).size.width < 600;
   bool _isTablet(BuildContext ctx)  => MediaQuery.of(ctx).size.width >= 600 && MediaQuery.of(ctx).size.width < 1024;
   bool _isDesktop(BuildContext ctx) => MediaQuery.of(ctx).size.width >= 1024;
@@ -252,9 +260,26 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
         final data = json.decode(res.body);
         if (data['status'] == 'OK' &&
             data['rows']?[0]['elements']?[0]['status'] == 'OK') {
-          setState(() {
-            distanceKm = data['rows'][0]['elements'][0]['distance']['value'] / 1000.0;
-          });
+          double newDistance =
+    data['rows'][0]['elements'][0]['distance']['value'] / 1000.0;
+
+setState(() {
+  distanceKm = newDistance;
+
+  // 🔥 AUTO MODE SWITCH
+  if (distanceKm > 130) {
+    _mainMode = 'OUTSTATION';
+    _tripType = 'OneWay';
+  } else {
+    _mainMode = 'LOCAL';
+    _tripType = 'Drop';
+  }
+});
+
+// 🔥 IMPORTANT → reload tariff after mode change
+_startTariffListener();
+
+_calculateFare();
           _calculateFare();
         }
       }
@@ -510,6 +535,10 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
       _pickupLatLng = _dropLatLng = null;
       pickupSuggestions = []; dropSuggestions = [];
       _markers.clear(); _polylines.clear();
+      // ── OTP reset ──────────────────────────────────────────
+      _isPhoneVerified  = false;
+      _otpVerificationId = null;
+      _otpResendToken    = null;
     });
     mapController?.animateCamera(CameraUpdate.newLatLngZoom(_chennaiCenter, 12));
   }
@@ -574,6 +603,518 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
+  //  OTP — SEND
+  // ══════════════════════════════════════════════════════════════
+Future<void> _sendOtp() async {
+  final rawPhone = phoneController.text.trim();
+  if (rawPhone.isEmpty || rawPhone.replaceAll(RegExp(r'\D'), '').length < 10) {
+    _showLuxurySnackBar('Enter a valid 10-digit phone number.', isError: true);
+    return;
+  }
+
+  final digits = rawPhone.replaceAll(RegExp(r'\D'), '');
+  final formatted = digits.startsWith('91') && digits.length == 12
+      ? '+$digits'
+      : '+91$digits';
+
+  // 🔹 Loader UI (same)
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => Center(
+      child: Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: kPanel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: kBorder),
+        ),
+        child: const CircularProgressIndicator(color: kGold, strokeWidth: 2),
+      ),
+    ),
+  );
+
+  try {
+    // ─────────────────────────────────────────
+    // ✅ WEB (FINAL FIX 🔥)
+    // ─────────────────────────────────────────
+    if (kIsWeb) {
+      final confirmationResult =
+          await FirebaseAuth.instance.signInWithPhoneNumber(formatted);
+
+      _webConfirmationResult = confirmationResult;
+
+      if (Navigator.canPop(context)) Navigator.pop(context);
+
+      _showOtpEntryDialog(formatted);
+      return;
+    }
+
+    // ─────────────────────────────────────────
+    // ✅ MOBILE (UNCHANGED)
+    // ─────────────────────────────────────────
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: formatted,
+      timeout: const Duration(seconds: 60),
+
+      codeSent: (String verificationId, int? resendToken) {
+        if (!mounted) return;
+        _otpVerificationId = verificationId;
+        _otpResendToken = resendToken;
+        if (Navigator.canPop(context)) Navigator.pop(context);
+        _showOtpEntryDialog(formatted);
+      },
+
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        if (!mounted) return;
+        try {
+          await FirebaseAuth.instance.signInWithCredential(credential);
+          if (Navigator.canPop(context)) Navigator.pop(context);
+          setState(() => _isPhoneVerified = true);
+          _showLuxurySnackBar('Phone verified automatically ✓');
+        } catch (e) {
+          if (Navigator.canPop(context)) Navigator.pop(context);
+          _showLuxurySnackBar('Auto-verify failed: $e', isError: true);
+        }
+      },
+
+      verificationFailed: (FirebaseAuthException e) {
+        if (!mounted) return;
+        if (Navigator.canPop(context)) Navigator.pop(context);
+
+        String msg;
+        switch (e.code) {
+          case 'invalid-phone-number':
+            msg = 'Invalid phone number format.';
+            break;
+          case 'too-many-requests':
+            msg = 'Too many attempts. Try again later.';
+            break;
+          default:
+            msg = e.message ?? 'OTP send failed. Try again.';
+        }
+
+        _showLuxurySnackBar(msg, isError: true);
+      },
+
+      codeAutoRetrievalTimeout: (String verificationId) {
+        _otpVerificationId = verificationId;
+      },
+
+      forceResendingToken: _otpResendToken,
+    );
+  } catch (e) {
+    if (Navigator.canPop(context)) Navigator.pop(context);
+    _showLuxurySnackBar('OTP failed: $e', isError: true);
+  }
+} 
+
+  // ══════════════════════════════════════════════════════════════
+  //  OTP — ENTRY DIALOG
+  // ══════════════════════════════════════════════════════════════
+
+  void _showOtpEntryDialog(String formattedPhone) {
+    final List<TextEditingController> otpCtrls =
+        List.generate(6, (_) => TextEditingController());
+    final List<FocusNode> focusNodes = List.generate(6, (_) => FocusNode());
+
+    bool isVerifying = false;
+    String? dialogError;
+    int resendSeconds = 30;
+    Timer? resendTimer;
+
+    void startTimer(StateSetter setS) {
+      resendSeconds = 30;
+      resendTimer?.cancel();
+      resendTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        setS(() {
+          if (resendSeconds > 0) resendSeconds--;
+          else t.cancel();
+        });
+      });
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black.withOpacity(0.85),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) {
+          // start timer on first build
+          if (resendTimer == null) startTimer(setS);
+
+          Future<void> verifyOtp() async {
+  final code = otpCtrls.map((c) => c.text).join();
+
+  if (code.length < 6) {
+    setS(() => dialogError = 'Enter all 6 digits.');
+    return;
+  }
+
+  setS(() {
+    isVerifying = true;
+    dialogError = null;
+  });
+
+  try {
+    // ─────────────────────────────────────────
+    // ✅ WEB FIX
+    // ─────────────────────────────────────────
+    if (kIsWeb) {
+      try {
+        await _webConfirmationResult!.confirm(code);
+
+        resendTimer?.cancel();
+        for (final c in otpCtrls) c.dispose();
+        for (final f in focusNodes) f.dispose();
+
+        Navigator.of(ctx).pop();
+        setState(() => _isPhoneVerified = true);
+        _showLuxurySnackBar('Phone verified ✓');
+
+        return;
+      } catch (e) {
+        setS(() {
+          isVerifying = false;
+          dialogError = 'Invalid OTP';
+        });
+        for (final c in otpCtrls) c.clear();
+        focusNodes[0].requestFocus();
+        return;
+      }
+    }
+
+    // ─────────────────────────────────────────
+    // ✅ MOBILE (UNCHANGED)
+    // ─────────────────────────────────────────
+    final credential = PhoneAuthProvider.credential(
+      verificationId: _otpVerificationId!,
+      smsCode: code,
+    );
+
+    await FirebaseAuth.instance.signInWithCredential(credential);
+
+    resendTimer?.cancel();
+    for (final c in otpCtrls) c.dispose();
+    for (final f in focusNodes) f.dispose();
+
+    Navigator.of(ctx).pop();
+    setState(() => _isPhoneVerified = true);
+    _showLuxurySnackBar('Phone verified ✓');
+
+  } on FirebaseAuthException catch (e) {
+    String msg;
+
+    switch (e.code) {
+      case 'invalid-verification-code':
+        msg = 'Wrong OTP. Please check and try again.';
+        break;
+
+      case 'session-expired':
+        msg = 'OTP expired. Please request a new one.';
+        _otpVerificationId = null;
+        break;
+
+      default:
+        msg = e.message ?? 'Verification failed. Try again.';
+    }
+
+    setS(() {
+      isVerifying = false;
+      dialogError = msg;
+    });
+
+    for (final c in otpCtrls) c.clear();
+    focusNodes[0].requestFocus();
+  }
+}
+
+          Future<void> resendOtp() async {
+            setS(() { dialogError = null; });
+            final digits    = phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
+            final formatted = digits.startsWith('91') && digits.length == 12
+                ? '+$digits' : '+91$digits';
+            await FirebaseAuth.instance.verifyPhoneNumber(
+              phoneNumber: formatted,
+              timeout: const Duration(seconds: 60),
+              codeSent: (String vid, int? token) {
+                _otpVerificationId = vid;
+                _otpResendToken    = token;
+                startTimer(setS);
+              },
+              verificationCompleted: (PhoneAuthCredential cred) async {
+                await FirebaseAuth.instance.signInWithCredential(cred);
+                resendTimer?.cancel();
+                Navigator.of(ctx).pop();
+                setState(() => _isPhoneVerified = true);
+                _showLuxurySnackBar('Phone verified automatically ✓');
+              },
+              verificationFailed: (FirebaseAuthException e) {
+                setS(() => dialogError = e.message ?? 'Resend failed.');
+              },
+              codeAutoRetrievalTimeout: (String vid) { _otpVerificationId = vid; },
+              forceResendingToken: _otpResendToken,
+            );
+          }
+
+          return Center(
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 340,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: kPanel,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: kBorder, width: 1.5),
+                  boxShadow: [BoxShadow(
+                    color: kGold.withOpacity(0.08),
+                    blurRadius: 40,
+                  )],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    // ── Header ──────────────────────────────────
+                    Row(children: [
+                      Container(
+                        width: 34, height: 34,
+                        decoration: BoxDecoration(
+                          color: kGold.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: kBorder),
+                        ),
+                        child: const Icon(Icons.verified_user_outlined, color: kGold, size: 16),
+                      ),
+                      const SizedBox(width: 12),
+                      const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('VERIFY PHONE', style: TextStyle(
+                          color: kGold, fontSize: 12,
+                          fontWeight: FontWeight.w900, letterSpacing: 2.5,
+                        )),
+                        Text('OTP Authentication', style: TextStyle(
+                          color: kTextMuted, fontSize: 9, letterSpacing: 1.2,
+                        )),
+                      ]),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () {
+                          resendTimer?.cancel();
+                          for (final c in otpCtrls) c.dispose();
+                          for (final f in focusNodes) f.dispose();
+                          Navigator.of(ctx).pop();
+                        },
+                        child: Container(
+                          width: 28, height: 28,
+                          decoration: BoxDecoration(
+                            color: kCardBg, borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: kBorder),
+                          ),
+                          child: const Icon(Icons.close, color: kTextMuted, size: 14),
+                        ),
+                      ),
+                    ]),
+
+                    const SizedBox(height: 20),
+
+                    // ── Phone display ────────────────────────────
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: kCardBg, borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: kBorder),
+                      ),
+                      child: Row(children: [
+                        const Icon(Icons.phone_android_outlined, color: kGold, size: 14),
+                        const SizedBox(width: 10),
+                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text('OTP SENT TO', style: TextStyle(
+                            color: kTextMuted, fontSize: 7,
+                            fontWeight: FontWeight.w700, letterSpacing: 1.8,
+                          )),
+                          const SizedBox(height: 2),
+                          Text(formattedPhone, style: const TextStyle(
+                            color: kTextPrimary, fontSize: 14,
+                            fontWeight: FontWeight.w600, letterSpacing: 1.5,
+                          )),
+                        ]),
+                      ]),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ── OTP label ────────────────────────────────
+                    const Text('ENTER OTP', style: TextStyle(
+                      color: kGold, fontSize: 8,
+                      fontWeight: FontWeight.w900, letterSpacing: 2,
+                    )),
+                    const SizedBox(height: 10),
+
+                    // ── 6 OTP boxes ──────────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(6, (i) {
+                        final isFilled = otpCtrls[i].text.isNotEmpty;
+                        return SizedBox(
+                          width: 42, height: 52,
+                          child: TextField(
+                            controller:   otpCtrls[i],
+                            focusNode:    focusNodes[i],
+                            textAlign:    TextAlign.center,
+                            keyboardType: TextInputType.number,
+                            maxLength:    1,
+                            style: const TextStyle(
+                              color: kGold, fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                            decoration: InputDecoration(
+                              counterText: '',
+                              filled:    true,
+                              fillColor: isFilled ? kGold.withOpacity(0.08) : kCardBg,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: isFilled ? kGold : kBorder,
+                                  width: isFilled ? 1.5 : 0.8,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: BorderSide(
+                                  color: isFilled ? kGold.withOpacity(0.5) : kBorder,
+                                  width: isFilled ? 1.2 : 0.8,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: kGold, width: 1.5),
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            onChanged: (v) {
+                              setS(() {});
+                              if (v.isNotEmpty && i < 5) focusNodes[i + 1].requestFocus();
+                              if (v.isEmpty && i > 0)   focusNodes[i - 1].requestFocus();
+                            },
+                          ),
+                        );
+                      }),
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // ── Resend row ───────────────────────────────
+                    Row(children: [
+                      const Text("Didn't receive?",
+                          style: TextStyle(color: kTextMuted, fontSize: 11)),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: resendSeconds == 0 ? resendOtp : null,
+                        child: Text(
+                          resendSeconds == 0
+                              ? 'Resend OTP'
+                              : 'Resend in ${resendSeconds}s',
+                          style: TextStyle(
+                            color:      resendSeconds == 0 ? kGold : kGoldDim,
+                            fontSize:   11,
+                            fontWeight: resendSeconds == 0 ? FontWeight.w700 : FontWeight.w400,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                    ]),
+
+                    // ── Error banner ─────────────────────────────
+                    if (dialogError != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0x15E53935),
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: const Color(0x55E53935)),
+                        ),
+                        child: Row(children: [
+                          const Icon(Icons.error_outline,
+                              color: Color(0xFFE53935), size: 13),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(dialogError!, style: const TextStyle(
+                            color: Color(0xFFEF9A9A), fontSize: 11, letterSpacing: 0.2,
+                          ))),
+                        ]),
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    // ── Buttons ──────────────────────────────────
+                    Row(children: [
+                      Expanded(child: SizedBox(
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            resendTimer?.cancel();
+                            for (final c in otpCtrls) c.dispose();
+                            for (final f in focusNodes) f.dispose();
+                            Navigator.of(ctx).pop();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: kTextMuted,
+                            side: const BorderSide(color: kBorder),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('CANCEL', style: TextStyle(
+                            fontSize: 8, fontWeight: FontWeight.w700, letterSpacing: 2,
+                          )),
+                        ),
+                      )),
+                      const SizedBox(width: 10),
+                      Expanded(flex: 2, child: SizedBox(
+                        height: 44,
+                        child: ElevatedButton(
+                          onPressed: isVerifying ? null : verifyOtp,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kGold,
+                            foregroundColor: kBg,
+                            disabledBackgroundColor: kGold.withOpacity(0.3),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: isVerifying
+                              ? const SizedBox(
+                                  width: 16, height: 16,
+                                  child: CircularProgressIndicator(
+                                      color: kBg, strokeWidth: 2))
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.verified_outlined, size: 13, color: kBg),
+                                    SizedBox(width: 8),
+                                    Text('VERIFY & BOOK', style: TextStyle(
+                                      color: kBg, fontSize: 10,
+                                      fontWeight: FontWeight.w900, letterSpacing: 1.8,
+                                    )),
+                                  ]),
+                        ),
+                      )),
+                    ]),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════
   //  CONFIRM BOOKING
   // ══════════════════════════════════════════════════════════════
 
@@ -592,6 +1133,14 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
     if (constraintError != null) {
       _showLuxurySnackBar(constraintError, isError: true);
       return;
+    }
+
+    // ── OTP check: if not yet verified, trigger OTP flow ──────
+    if (!_isPhoneVerified) {
+      await _sendOtp();
+      // _sendOtp opens dialog; _isPhoneVerified set inside dialog on success
+      // If user cancelled/failed, we stop here
+      if (!_isPhoneVerified) return;
     }
 
     try {
@@ -703,8 +1252,6 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
     final mobile = _isMobile(context);
     final tablet = _isTablet(context);
 
-    // Mobile & narrow tablet: stacked (form on top, map below)
-    // Wide tablet & desktop:  side-by-side (original layout)
     if (mobile) {
       return _buildMobileLayout(sw, sh);
     } else if (tablet) {
@@ -715,7 +1262,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  DESKTOP LAYOUT (original — side by side 4:6)
+  //  DESKTOP LAYOUT
   // ══════════════════════════════════════════════════════════════
 
   Widget _buildDesktopLayout(double sw, double sh) {
@@ -754,7 +1301,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  TABLET LAYOUT (side by side 5:5, slightly compact)
+  //  TABLET LAYOUT
   // ══════════════════════════════════════════════════════════════
 
   Widget _buildTabletLayout(double sw, double sh) {
@@ -793,7 +1340,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  MOBILE LAYOUT (stacked: form → map)
+  //  MOBILE LAYOUT
   // ══════════════════════════════════════════════════════════════
 
   Widget _buildMobileLayout(double sw, double sh) {
@@ -801,13 +1348,11 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
       color: kBg,
       child: SizedBox(
         width: sw,
-        // Let content scroll — no fixed height constraint
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Form Panel ──────────────────────────────────
               Container(
                 margin: const EdgeInsets.fromLTRB(10, 10, 10, 6),
                 decoration: BoxDecoration(
@@ -828,8 +1373,6 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-
-              // ── Map Panel ───────────────────────────────────
               Container(
                 margin: const EdgeInsets.fromLTRB(10, 6, 10, 10),
                 height: 320,
@@ -862,7 +1405,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  SHARED MAP PANEL (desktop / tablet)
+  //  SHARED MAP PANEL
   // ══════════════════════════════════════════════════════════════
 
   Widget _buildMapPanel({required EdgeInsets margin}) {
@@ -932,7 +1475,7 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  FORM CHILDREN (shared by all layouts)
+  //  FORM CHILDREN
   // ══════════════════════════════════════════════════════════════
 
   List<Widget> _formChildren({bool compact = false}) {
@@ -1150,7 +1693,48 @@ class _HomepageState extends State<Homepage> with TickerProviderStateMixin {
       _sectionLabel('PASSENGER DETAILS'),
       _luxuryInput('Passenger Name', nameController, Icons.person_outline),
       const SizedBox(height: 8),
-      _luxuryInput('Phone Number', phoneController, Icons.phone_android_outlined),
+      // ── Phone field + Send OTP button ────────────────────────
+      Row(children: [
+        Expanded(
+          child: _luxuryInput('Phone Number', phoneController, Icons.phone_android_outlined),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: _isPhoneVerified ? null : _sendOtp,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: _isPhoneVerified ? kGold.withOpacity(0.15) : kCardBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _isPhoneVerified ? kGold : kBorder,
+                width: _isPhoneVerified ? 1.2 : 0.8,
+              ),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(
+                _isPhoneVerified
+                    ? Icons.verified_outlined
+                    : Icons.send_outlined,
+                color: _isPhoneVerified ? kGold : kHintText,
+                size: 13,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _isPhoneVerified ? 'VERIFIED' : 'SEND OTP',
+                style: TextStyle(
+                  color: _isPhoneVerified ? kGold : kHintText,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.8,
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ]),
     ]);
   }
 
