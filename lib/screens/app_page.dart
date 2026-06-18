@@ -239,7 +239,7 @@ class _AppCardState extends State<_AppCard>
   bool _hovered = false;
 
   bool   get _isUser    => widget.type == _AppType.user;
-  String get _title     => _isUser ? 'Rider App'      : 'Driver App';
+  String get _title     => _isUser ? 'USER App'      : 'Driver App';
   String get _subtitle  => _isUser ? 'FOR PASSENGERS' : 'FOR DRIVERS';
   String get _desc      => _isUser
       ? 'Book rides instantly, track your cab live, pay via UPI or cash. Simple and fast.'
@@ -247,7 +247,7 @@ class _AppCardState extends State<_AppCard>
   String get _badge1    => _isUser ? 'Live Tracking'   : 'Earnings Dashboard';
   String get _badge2    => _isUser ? 'UPI / Cash'      : 'Route Navigation';
   String get _badge3    => _isUser ? 'Instant Booking' : 'Trip Management';
-  String get _btnLabel  => _isUser ? 'Download Rider App' : 'Download Driver App';
+  String get _btnLabel  => _isUser ? 'Download User App' : 'Download Driver App';
 
   @override
   void initState() {
